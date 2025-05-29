@@ -1,14 +1,13 @@
 // src/services/file-creator.service.ts
 import * as fs from "fs/promises";
 import * as path from "path";
-import prettier, { Options as PrettierOptions } from "prettier";
+import prettier from "prettier";
 
 export class FileCreatorService {
   /**
    * Сохраняет строку content в файл outDir/fileName.
-   * Если файл существует и его содержимое отличается от нового,
-   * сохраняет копию в .bak.<timestamp> перед перезаписью.
-   * Перед записью прогоняет контент через Prettier с учётом вашего .prettierrc.
+   * Если файл существует и его содержимое (после форматирования) отличается от нового,
+   * сначала сохраняет копию старого в .bak.<timestamp>, затем записывает отформатированный.
    */
   public async save(
     outDir: string,
@@ -17,21 +16,17 @@ export class FileCreatorService {
   ): Promise<void> {
     // 1. Убедиться, что директория существует
     await fs.mkdir(outDir, { recursive: true });
-
     const fullPath = path.join(outDir, fileName);
 
-    // 2. Определяем путь к файлу для Prettier, чтобы он нашёл ваш конфиг
-    const filepath = fullPath;
-
-    // 3. Попробуем загрузить локальный конфиг Prettier (если есть)
-    let config: PrettierOptions | null = null;
+    // 2. Найти конфиг Prettier (если есть)
+    let prettierConfig: prettier.Options | null = null;
     try {
-      config = await prettier.resolveConfig(filepath);
+      prettierConfig = await prettier.resolveConfig(fullPath);
     } catch {
-      config = null;
+      // игнорируем ошибки поиска конфига
     }
 
-    // 4. Вычислить, какой парсер использовать по расширению
+    // 3. Определить парсер по расширению
     const ext = path.extname(fileName).toLowerCase();
     let parser: prettier.BuiltInParserName;
     switch (ext) {
@@ -57,23 +52,20 @@ export class FileCreatorService {
         parser = "babel";
     }
 
-    // 5. Формируем опции форматирования, включая найденный конфиг и указание файла
-    const prettierOptions: PrettierOptions = {
-      parser,
-      filepath,
-      ...(config ?? {}),
-    };
-
-    // 6. Отформатировать контент через Prettier
+    // 4. Отформатировать контент через Prettier
     let formatted: string;
     try {
-      formatted = await prettier.format(content, prettierOptions);
+      formatted = await prettier.format(content, {
+        ...prettierConfig,
+        parser,
+        filepath: fullPath,
+      });
     } catch {
-      // если форматирование не удалось — используем оригинал
+      // если форматирование не удалось, используем оригинал
       formatted = content;
     }
 
-    // 7. Если файл существует — прочитать его и сравнить содержимое
+    // 5. Проверить, нужно ли делать бэкап: сравнить уже существующий файл с новым отформатированным
     let shouldBackup = false;
     try {
       const existing = await fs.readFile(fullPath, "utf-8");
@@ -83,14 +75,14 @@ export class FileCreatorService {
         console.log(`No changes in ${fullPath}, backup skipped`);
       }
     } catch (err: any) {
-      if (err.code === "ENOENT") {
-        // Файла нет — бэкап не нужен
-      } else {
+      if (err.code !== "ENOENT") {
+        // какая-то другая ошибка доступа — пробрасываем
         throw err;
       }
+      // ENOENT — файла нет, бэкап не нужен
     }
 
-    // 8. Если нужно — сделать резервную копию с timestamp
+    // 6. Если нужно, сделать резервную копию с меткой времени
     if (shouldBackup) {
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, "0");
@@ -109,7 +101,7 @@ export class FileCreatorService {
       console.log(`Backup created: ${bakPath}`);
     }
 
-    // 9. Записать (или перезаписать) файл уже отформатированным содержимым
+    // 7. Записать (или перезаписать) файл уже отформатированным содержимым
     await fs.writeFile(fullPath, formatted, "utf-8");
     console.log(`File written to ${fullPath}`);
   }

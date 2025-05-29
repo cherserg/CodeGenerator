@@ -69,12 +69,10 @@ export class RepositoryLoader {
         const raw = await fs.readFile(full, "utf8");
         try {
           const { data, content } = matter(raw);
-          // Убираем общий ведущий отступ у каждой строки контента,
-          // чтобы и для шаблонов, и для частей было единообразное форматирование
-          const processedContent = content.replace(/^\s+/gm, "");
+          // Передаём контент как есть, без удаления отступов:
           const item = {
             ...(data as object),
-            content: processedContent,
+            content,
           } as T;
           upsertFn(item);
         } catch (e) {
