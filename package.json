@@ -1,0 +1,53 @@
+{
+  "name": "code-generator",
+  "displayName": "CodeGenerator",
+  "description": "Генерирует код и документацию на основе YAML-шаблонов",
+  "version": "0.0.1",
+  "publisher": "cherserg",
+  "engines": {
+    "vscode": "^1.65.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codegenerator.generateDocs",
+        "title": "Generate Documentation"
+      },
+      {
+        "command": "codegenerator.restoreFromBackup",
+        "title": "Restore Documentation from Backup"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onCommand:codegenerator.generateDocs",
+    "onCommand:codegenerator.restoreFromBackup"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js"
+  },
+  "files": [
+    "out",
+    "README.md"
+  ],
+  "devDependencies": {
+    "@types/node": "^14.17.6",
+    "typescript": "^4.5.2",
+    "vsce": "^2.5.0",
+    "vscode": "^1.1.37"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "prettier": "^3.5.3",
+    "yaml": "^2.8.0"
+  }
+}
