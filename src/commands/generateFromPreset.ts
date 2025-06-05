@@ -12,6 +12,9 @@ import { RepositoryLoader } from "../loaders/repository.loader";
 import { TemplateManager } from "../managers/template.manager";
 
 import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
+import { IEntity } from "../interfaces/entities/entity.interface";
+import { IScript } from "../interfaces/entities/script.interface";
+import { IPreset } from "../interfaces/entities/preset.interface";
 import {
   getWorkspaceRoot,
   showError,
@@ -49,83 +52,130 @@ export function registerGenerateFromPresetCommand(context: any) {
         presetsRepo
       ).loadAll(baseDir);
 
-      /* ---------- выбор сущности с пресетом ---------- */
-      const entityPick = await vscode.window.showQuickPick(
-        entitiesRepo
-          .getAll()
-          .filter((e) => e.presets?.length)
-          .map((e) => ({ label: e.name })),
-        { placeHolder: "Выберите сущность" }
-      );
-      if (!entityPick) throw new Error("Сущность не выбрана");
-      const entityObj = entitiesRepo.getByKey(entityPick.label)!;
-
-      /* ---------- выбор пресета ---------- */
-      const presetPick = await vscode.window.showQuickPick(
-        entityObj.presets!.map((p) => ({ label: p })),
-        { placeHolder: "Выберите пресет" }
-      );
-      if (!presetPick) throw new Error("Пресет не выбран");
-
-      const presetObj = presetsRepo.getByKey(presetPick.label);
-      if (!presetObj) {
-        showWarning(`Пресет «${presetPick.label}» не найден в _presets`);
-        return;
-      }
-
-      /* ---------- скрипты из пресета ---------- */
-      const scriptObjs = presetObj.scripts
-        .map((n) => scriptsRepo.getByKey(n))
-        .filter(Boolean);
-
-      if (!scriptObjs.length) {
-        showWarning("Ни одного доступного скрипта для генерации не найдено.");
-        return;
-      }
-
-      /* ---------- подходящие шаблоны ---------- */
-      const templates = tplRepo
+      /* ---------- выбор сущностей с пресетами ---------- */
+      const entityChoices: vscode.QuickPickItem[] = entitiesRepo
         .getAll()
-        .filter((tpl) =>
-          scriptObjs.some((s) => isTemplateApplicable(tpl, s!, entityObj))
-        );
-      if (!templates.length) {
-        showWarning(
-          "Не найдено шаблонов, подходящих под выбранный пресет и сущность."
-        );
+        .filter(
+          (e: IEntity) => Array.isArray(e.presets) && e.presets.length > 0
+        )
+        .map((e: IEntity) => ({ label: e.name }));
+      const entityPicks = await vscode.window.showQuickPick(entityChoices, {
+        canPickMany: true,
+        placeHolder: "Выберите одну или несколько сущностей",
+      });
+      if (!entityPicks || entityPicks.length === 0) {
+        throw new Error("Сущности не выбраны");
+      }
+      const entityObjs: IEntity[] = entityPicks
+        .map((p) => entitiesRepo.getByKey(p.label))
+        .filter((e): e is IEntity => e !== undefined);
+
+      /* ---------- объединяем все пресеты выбранных сущностей ---------- */
+      const allPresetLabels: string[] = entityObjs.reduce<string[]>(
+        (acc, e) => {
+          if (Array.isArray(e.presets)) {
+            return acc.concat(e.presets);
+          }
+          return acc;
+        },
+        []
+      );
+      const uniquePresetLabels: string[] = Array.from(new Set(allPresetLabels));
+      if (uniquePresetLabels.length === 0) {
+        showWarning("Нет доступных пресетов для выбранных сущностей.");
         return;
       }
 
+      /* ---------- выбор пресетов ---------- */
+      const presetItems: vscode.QuickPickItem[] = uniquePresetLabels.map(
+        (presetKey: string) => ({ label: presetKey })
+      );
+      const presetPicks = await vscode.window.showQuickPick(presetItems, {
+        canPickMany: true,
+        placeHolder: "Выберите пресеты",
+      });
+      if (!presetPicks || presetPicks.length === 0) {
+        throw new Error("Пресеты не выбраны");
+      }
+      const selectedPresetKeys: string[] = presetPicks.map((p) => p.label);
+
+      const presetObjs: IPreset[] = selectedPresetKeys
+        .map((key: string) => presetsRepo.getByKey(key))
+        .filter((p): p is IPreset => p !== undefined);
+      if (presetObjs.length === 0) {
+        showWarning("Ни одного найденного пресета не удалось загрузить.");
+        return;
+      }
+
+      /* ---------- генерация для каждой комбинации сущности + пресет ---------- */
       const manager = new TemplateManager(partRepo);
+      const allTemplates = tplRepo.getAll();
 
-      /* ---------- генерация ---------- */
-      for (const scr of scriptObjs) {
-        const applicableTemplates = templates.filter((tpl) =>
-          isTemplateApplicable(tpl, scr!, entityObj)
-        );
+      for (const entityObj of entityObjs) {
+        for (const presetObj of presetObjs) {
+          if (
+            !entityObj.presets ||
+            !entityObj.presets.includes(presetObj.key)
+          ) {
+            // Этот пресет не относится к этой сущности, пропускаем
+            continue;
+          }
 
-        for (const tpl of applicableTemplates) {
-          const outputConfig = {
-            outputPath: tpl.outputPath
-              ? path.join(root, tpl.outputPath)
-              : path.join(root, globalOutputPath),
-            outputExt,
-            pathOrder: tpl.pathOrder ?? globalPathOrder,
-          };
+          /* ---------- скрипты из пресета ---------- */
+          const scriptObjs: IScript[] = presetObj.scripts
+            .map((scriptName: string) => scriptsRepo.getByKey(scriptName))
+            .filter((s): s is IScript => s !== undefined);
 
-          const request: IGenerationRequest = {
-            template: tpl,
-            entity: entityObj,
-            script: scr!,
-            output: outputConfig,
-          };
+          if (scriptObjs.length === 0) {
+            showWarning(
+              `Ни одного доступного скрипта для пресета «${presetObj.key}» не найдено.`
+            );
+            continue;
+          }
 
-          await manager.generate(request);
+          /* ---------- подходящие шаблоны ---------- */
+          const templates = allTemplates.filter((tpl) =>
+            scriptObjs.some((s) => isTemplateApplicable(tpl, s, entityObj))
+          );
+          if (templates.length === 0) {
+            showWarning(
+              `Не найдено шаблонов, подходящих под пресет «${presetObj.key}» и сущность «${entityObj.name}».`
+            );
+            continue;
+          }
+
+          /* ---------- генерация ---------- */
+          for (const scr of scriptObjs) {
+            const applicableTemplates = templates.filter((tpl) =>
+              isTemplateApplicable(tpl, scr, entityObj)
+            );
+
+            for (const tpl of applicableTemplates) {
+              const outputConfig = {
+                outputPath: tpl.outputPath
+                  ? path.join(root, tpl.outputPath)
+                  : path.join(root, globalOutputPath),
+                outputExt,
+                pathOrder: tpl.pathOrder ?? globalPathOrder,
+              };
+
+              const request: IGenerationRequest = {
+                template: tpl,
+                entity: entityObj,
+                script: scr,
+                output: outputConfig,
+              };
+
+              await manager.generate(request);
+            }
+          }
         }
       }
 
+      const entityNames = entityObjs.map((e) => e.name).join(", ");
+      const presetNames = presetObjs.map((p) => p.key).join(", ");
       showInfo(
-        `Генерация по пресету «${presetObj.key}» для сущности «${entityObj.name}» завершена`
+        `Генерация по пресетам «${presetNames}» для сущностей «${entityNames}» завершена`
       );
     },
     (err) => showError(`Ошибка: ${err.message}`)
