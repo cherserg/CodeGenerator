@@ -131,6 +131,15 @@ export class SyncIndexService {
 
   /** Формирует итоговый текст index.ts */
   private generateContent(folders: string[], tsFiles: string[]): string {
+    // Если в папке нет ни подпапок, ни .ts-файлов, пишем export * from '.';
+    if (folders.length === 0 && tsFiles.length === 0) {
+      return (
+        "// Этот файл сгенерирован автоматически. Не редактируйте вручную.\n" +
+        "\n" +
+        "export * from '.';\n"
+      );
+    }
+
     const lines: string[] = [
       "// Этот файл сгенерирован автоматически. Не редактируйте вручную.",
       "",
