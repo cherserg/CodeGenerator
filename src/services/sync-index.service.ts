@@ -11,7 +11,7 @@ import { showWarning, showInfo } from "../utils/vscode.utils";
  * Возвращает `true`, если хотя бы один файл был успешно перезаписан.
  */
 export class SyncIndexService {
-  /** Запускает обход и синхронизацию */
+  /** Запускает обход и синхронизацию для всего дерева начиная с rootDir */
   public async run(rootDir: string): Promise<boolean> {
     const allFolders = await this.getAllSubfolders(rootDir);
     if (!allFolders.length) {
@@ -22,6 +22,40 @@ export class SyncIndexService {
     let anySuccess = false;
 
     for (const dir of allFolders) {
+      try {
+        const { folders, tsFiles } = await this.collectModules(dir);
+        const newContent = this.generateContent(folders, tsFiles);
+
+        const indexPath = path.join(dir, "index.ts");
+        await this.backupIfExists(indexPath);
+        await this.writeFormatted(indexPath, newContent);
+
+        anySuccess = true;
+      } catch (err: any) {
+        showWarning(`Не удалось обработать папку "${dir}": ${err.message}`);
+      }
+    }
+
+    if (anySuccess) {
+      showInfo("Синхронизация index.ts завершена.");
+    }
+
+    return anySuccess;
+  }
+
+  /**
+   * Запускает синхронизацию только для указанных в folders папок (без рекурсии).
+   * Возвращает `true`, если хотя бы один файл был успешно перезаписан.
+   */
+  public async runOnFolders(foldersToSync: string[]): Promise<boolean> {
+    if (!foldersToSync.length) {
+      showWarning("Не выбраны папки для синхронизации.");
+      return false;
+    }
+
+    let anySuccess = false;
+
+    for (const dir of foldersToSync) {
       try {
         const { folders, tsFiles } = await this.collectModules(dir);
         const newContent = this.generateContent(folders, tsFiles);
