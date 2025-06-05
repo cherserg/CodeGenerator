@@ -13,4 +13,5 @@ function registerCommands(context: vscode.ExtensionContext) {
   commands.registerGenerateDocsCommand(context);
   commands.registerRestoreDocsCommand(context);
   commands.registerGenerateFromPresetCommand(context);
+  commands.registerSyncIndexCommand(context);
 }

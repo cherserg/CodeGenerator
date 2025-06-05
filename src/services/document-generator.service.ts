@@ -1,4 +1,5 @@
 // src/services/document-generator.service.ts
+
 import { ITemplate } from "../interfaces/entities/template.interface";
 import { TemplatePartRepository } from "../repositories/template-part.repository";
 
@@ -34,6 +35,9 @@ export class DocumentGeneratorService {
       return part ? part.content : "";
     });
 
-    return raw;
+    // Добавляем шапку во все сгенерированные документы:
+    const header =
+      "// Этот файл сгенерирован автоматически. Не редактируйте вручную.\n\n";
+    return header + raw;
   }
 }

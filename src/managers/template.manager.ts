@@ -1,4 +1,5 @@
 // src/managers/template.manager.ts
+
 import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
 import { DocumentGeneratorService } from "../services/document-generator.service";
 import { PathCreatorService } from "../services/path-creator.service";
@@ -22,6 +23,7 @@ export class TemplateManager {
     // Если сущности нет — работаем с пустым набором переменных
     const entityVars = entity?.variables ?? {};
 
+    // Получаем документ, уже включающий шапку
     const document = this.docService.generate(
       template,
       entityVars,

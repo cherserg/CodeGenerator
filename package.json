@@ -24,13 +24,18 @@
       {
         "command": "codegenerator.restoreFromBackup",
         "title": "Restore Docs from Backup"
+      },
+      {
+        "command": "codegenerator.syncIndex",
+        "title": "Synchronize index.ts"
       }
     ]
   },
   "activationEvents": [
     "onCommand:codegenerator.generateDocs",
     "onCommand:codegenerator.generateFromPreset",
-    "onCommand:codegenerator.restoreFromBackup"
+    "onCommand:codegenerator.restoreFromBackup",
+    "onCommand:codegenerator.syncIndex"
   ],
   "repository": {
     "type": "git",
