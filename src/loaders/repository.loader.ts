@@ -84,16 +84,16 @@ export class RepositoryLoader {
 
   public async loadAll(baseDir: string): Promise<void> {
     await Promise.all([
-      this.loadFromHbs<ITemplatePart>(baseDir, "parts", (p) =>
+      this.loadFromHbs<ITemplatePart>(baseDir, "t-parts", (p) =>
         this.partsRepo.upsert(p)
       ),
-      this.loadFromHbs<ITemplate>(baseDir, "templates", (t) =>
+      this.loadFromHbs<ITemplate>(baseDir, "_templates", (t) =>
         this.templatesRepo.upsert(t)
       ),
-      this.loadFromHbs<IScript>(baseDir, "scripts", (s) =>
+      this.loadFromHbs<IScript>(baseDir, "_scripts", (s) =>
         this.scriptsRepo.upsert(s)
       ),
-      this.loadFromHbs<IEntity>(baseDir, "entities", (e) =>
+      this.loadFromHbs<IEntity>(baseDir, "_entities", (e) =>
         this.entitiesRepo.upsert(e)
       ),
     ]);

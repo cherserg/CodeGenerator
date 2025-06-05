@@ -1,31 +1,42 @@
 // src/utils/pick.utils.ts
-
 import * as vscode from "vscode";
 import { IEntity } from "../interfaces/entities/entity.interface";
 import { IScript } from "../interfaces/entities/script.interface";
 import { ITemplate } from "../interfaces/entities/template.interface";
 import { NO_ENTITY_LABEL } from "../interfaces";
 
+/**
+ * Выбираем скрипты, отсортированные по алфавиту.
+ */
 export async function pickScripts(
   scripts: IScript[],
   placeHolder: string
 ): Promise<IScript[]> {
-  const items = scripts.map((s) => ({ label: s.name }));
+  const sorted = [...scripts].sort((a, b) =>
+    a.name.localeCompare(b.name, "ru", { numeric: true, sensitivity: "base" })
+  );
+  const items = sorted.map((s) => ({ label: s.name }));
   const picked = await vscode.window.showQuickPick(items, {
     canPickMany: true,
     placeHolder,
   });
   if (!picked?.length) throw new Error("Не выбраны скрипты");
-  return picked.map((p) => scripts.find((s) => s.name === p.label)!);
+  return picked.map((p) => sorted.find((s) => s.name === p.label)!);
 }
 
+/**
+ * Выбираем сущности (или «Без сущности»), отсортированные по алфавиту.
+ */
 export async function pickEntities(
   entities: IEntity[],
   placeHolder: string
 ): Promise<(IEntity | undefined)[]> {
+  const sorted = [...entities].sort((a, b) =>
+    a.name.localeCompare(b.name, "ru", { numeric: true, sensitivity: "base" })
+  );
   const choices = [
     { label: NO_ENTITY_LABEL, description: "Без сущности" },
-    ...entities.map((e) => ({ label: e.name })),
+    ...sorted.map((e) => ({ label: e.name })),
   ];
   const picked = await vscode.window.showQuickPick(choices, {
     canPickMany: true,
@@ -35,10 +46,13 @@ export async function pickEntities(
   return picked.map((p) =>
     p.label === NO_ENTITY_LABEL
       ? undefined
-      : entities.find((e) => e.name === p.label)!
+      : sorted.find((e) => e.name === p.label)!
   );
 }
 
+/**
+ * Фильтруем и выбираем шаблоны (порядок остаётся как был).
+ */
 export async function pickTemplates(
   templates: ITemplate[],
   scripts: IScript[],
