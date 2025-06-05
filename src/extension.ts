@@ -12,4 +12,5 @@ function registerCommands(context: vscode.ExtensionContext) {
   // Здесь можно по аналогии добавить другие команды
   commands.registerGenerateDocsCommand(context);
   commands.registerRestoreDocsCommand(context);
+  commands.registerGenerateFromPresetCommand(context);
 }

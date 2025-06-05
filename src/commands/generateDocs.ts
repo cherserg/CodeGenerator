@@ -1,18 +1,24 @@
 // src/commands/generateDocs.ts
-
 import * as fs from "fs/promises";
 import { registerCommand } from "./_common";
 import { TemplateRepository } from "../repositories/template.repository";
 import { TemplatePartRepository } from "../repositories/template-part.repository";
 import { ScriptRepository } from "../repositories/script.repository";
 import { EntityRepository } from "../repositories/entity.repository";
+import { PresetRepository } from "../repositories/preset.repository";
 import { RepositoryLoader } from "../loaders/repository.loader";
 import { TemplateManager } from "../managers/template.manager";
 import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
 
 import { readCodegenConfig } from "../utils/read-config.util";
-import { getWorkspaceRoot, showInfo, showError } from "../utils/vscode.utils";
+import {
+  getWorkspaceRoot,
+  showInfo,
+  showError,
+  showWarning,
+} from "../utils/vscode.utils";
 import { pickScripts, pickEntities, pickTemplates } from "../utils/pick.utils";
+import { isTemplateApplicable } from "../utils/template-applicability.util";
 
 export function registerGenerateDocsCommand(context: any) {
   registerCommand(
@@ -32,23 +38,49 @@ export function registerGenerateDocsCommand(context: any) {
       const partRepo = new TemplatePartRepository();
       const scriptsRepo = new ScriptRepository();
       const entitiesRepo = new EntityRepository();
+      const presetsRepo = new PresetRepository();
+
       await new RepositoryLoader(
         tplRepo,
         partRepo,
         scriptsRepo,
-        entitiesRepo
+        entitiesRepo,
+        presetsRepo
       ).loadAll(baseDir);
 
-      const scripts = await pickScripts(
-        scriptsRepo.getAll(),
-        "Выберите скрипты"
-      );
+      /* ---------- сначала выбираем сущности ---------- */
       const entities = await pickEntities(
         entitiesRepo.getAll(),
         "Выберите сущности (или пункт «Без сущности»)"
       );
+
+      /* ---------- оставляем только скрипты, у которых есть подходящие шаблоны
+                    для ХОТЯ БЫ одной из выбранных сущностей (или без сущности) ---------- */
+      const allTemplates = tplRepo.getAll();
+      const scriptsWithTemplates = scriptsRepo
+        .getAll()
+        .filter((scr) =>
+          allTemplates.some((tpl) =>
+            entities.some((ent) => isTemplateApplicable(tpl, scr, ent))
+          )
+        );
+
+      if (!scriptsWithTemplates.length) {
+        showWarning(
+          "Под выбранные сущности не найдено ни одного скрипта с шаблонами."
+        );
+        return;
+      }
+
+      /* ---------- теперь выбор скриптов ---------- */
+      const scripts = await pickScripts(
+        scriptsWithTemplates,
+        "Выберите скрипты"
+      );
+
+      /* ---------- и, наконец, выбор шаблонов ---------- */
       const templates = await pickTemplates(
-        tplRepo.getAll(),
+        allTemplates,
         scripts,
         entities,
         "Выберите шаблоны для генерации"
@@ -57,27 +89,18 @@ export function registerGenerateDocsCommand(context: any) {
       const manager = new TemplateManager(partRepo);
 
       for (const tpl of templates) {
-        // Мержим глобальные и шаблонные настройки output
         const effectiveOutputPath = tpl.outputPath
           ? `${root}/${tpl.outputPath}`
           : `${root}/${globalOutputPath}`;
-        const effectivePathOrder = tpl.pathOrder ?? globalPathOrder;
         const outputConfig = {
           outputPath: effectiveOutputPath,
           outputExt,
-          pathOrder: effectivePathOrder,
+          pathOrder: tpl.pathOrder ?? globalPathOrder,
         };
 
         for (const scr of scripts) {
-          if (!tpl.applicableScripts.includes(scr.name)) continue;
           for (const ent of entities) {
-            if (
-              ent &&
-              tpl.applicableEntities &&
-              tpl.applicableEntities.length > 0 &&
-              !tpl.applicableEntities.includes(ent.name)
-            )
-              continue;
+            if (!isTemplateApplicable(tpl, scr, ent)) continue;
 
             const req: IGenerationRequest = {
               template: tpl,

@@ -15,16 +15,21 @@
     "commands": [
       {
         "command": "codegenerator.generateDocs",
-        "title": "Generate Documentation"
+        "title": "Generate Docs"
+      },
+      {
+        "command": "codegenerator.generateFromPreset",
+        "title": "Generate Docs From Preset"
       },
       {
         "command": "codegenerator.restoreFromBackup",
-        "title": "Restore Documentation from Backup"
+        "title": "Restore Docs from Backup"
       }
     ]
   },
   "activationEvents": [
     "onCommand:codegenerator.generateDocs",
+    "onCommand:codegenerator.generateFromPreset",
     "onCommand:codegenerator.restoreFromBackup"
   ],
   "repository": {

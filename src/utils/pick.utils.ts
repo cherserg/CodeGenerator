@@ -4,10 +4,9 @@ import { IEntity } from "../interfaces/entities/entity.interface";
 import { IScript } from "../interfaces/entities/script.interface";
 import { ITemplate } from "../interfaces/entities/template.interface";
 import { NO_ENTITY_LABEL } from "../interfaces";
+import { isTemplateApplicable } from "./template-applicability.util";
 
-/**
- * Выбираем скрипты, отсортированные по алфавиту.
- */
+/* ----------- выбор скриптов ----------- */
 export async function pickScripts(
   scripts: IScript[],
   placeHolder: string
@@ -24,9 +23,7 @@ export async function pickScripts(
   return picked.map((p) => sorted.find((s) => s.name === p.label)!);
 }
 
-/**
- * Выбираем сущности (или «Без сущности»), отсортированные по алфавиту.
- */
+/* ----------- выбор сущностей ----------- */
 export async function pickEntities(
   entities: IEntity[],
   placeHolder: string
@@ -50,25 +47,17 @@ export async function pickEntities(
   );
 }
 
-/**
- * Фильтруем и выбираем шаблоны (порядок остаётся как был).
- */
+/* ----------- выбор шаблонов ----------- */
 export async function pickTemplates(
   templates: ITemplate[],
   scripts: IScript[],
   entities: (IEntity | undefined)[],
   placeHolder: string
 ): Promise<ITemplate[]> {
-  const filtered = templates.filter(
-    (t) =>
-      scripts.some((s) => t.applicableScripts.includes(s.name)) &&
-      (entities.some((e) => e === undefined) ||
-        !t.applicableEntities ||
-        t.applicableEntities.length === 0 ||
-        entities
-          .filter((e) => e)
-          .some((e) => t.applicableEntities!.includes(e!.name)))
+  const filtered = templates.filter((tpl) =>
+    scripts.some((s) => entities.some((e) => isTemplateApplicable(tpl, s, e)))
   );
+
   const items = filtered.map((t) => ({
     label: t.key,
     description: t.description,

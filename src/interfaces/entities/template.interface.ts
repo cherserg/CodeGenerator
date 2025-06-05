@@ -11,8 +11,10 @@ export interface ITemplate {
   key: string;
   content: string;
   description?: string;
-  applicableScripts: string[];
+  applicableScripts?: string[];
   applicableEntities?: string[];
+  nonApplicableScripts?: string[];
+  nonApplicableEntities?: string[];
   outputExt: TExtension;
   outputPath?: string;
   pathOrder?: Array<"entity" | "script">;

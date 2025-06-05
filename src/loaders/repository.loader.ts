@@ -11,22 +11,23 @@ import {
 } from "../repositories/template-part.repository";
 import { ScriptRepository } from "../repositories/script.repository";
 import { EntityRepository } from "../repositories/entity.repository";
+import { PresetRepository } from "../repositories/preset.repository";
 
 import { ITemplate } from "../interfaces/entities/template.interface";
 import { IScript } from "../interfaces/entities/script.interface";
 import { IEntity } from "../interfaces/entities/entity.interface";
+import { IPreset } from "../interfaces/entities/preset.interface";
 
 export class RepositoryLoader {
   constructor(
     private templatesRepo: TemplateRepository,
     private partsRepo: TemplatePartRepository,
     private scriptsRepo: ScriptRepository,
-    private entitiesRepo: EntityRepository
+    private entitiesRepo: EntityRepository,
+    private presetsRepo: PresetRepository
   ) {}
 
-  /**
-   * Рекурсивно собирает все файлы внутри директории dir.
-   */
+  /** Рекурсивно собирает все файлы в директории dir */
   private async getFilesRecursively(dir: string): Promise<string[]> {
     let results: string[] = [];
     let entries: Dirent[];
@@ -40,28 +41,24 @@ export class RepositoryLoader {
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        const nested = await this.getFilesRecursively(fullPath);
-        results = results.concat(nested);
+        results = results.concat(await this.getFilesRecursively(fullPath));
       } else {
         results.push(fullPath);
       }
     }
-
     return results;
   }
 
-  /**
-   * Загружает все .hbs-файлы из baseDir/subdir и всех его подпапок,
-   * парсит их через gray-matter и вызывает upsertFn для каждого объекта.
-   */
+  /** Загружает все .hbs-файлы из baseDir/subdir и всех подпапок */
   private async loadFromHbs<T>(
     baseDir: string,
     subdir: string,
     upsertFn: (item: T) => void
   ) {
     const dir = path.join(baseDir, subdir);
-    const allFiles = await this.getFilesRecursively(dir);
-    const hbsFiles = allFiles.filter((f) => f.endsWith(".hbs"));
+    const hbsFiles = (await this.getFilesRecursively(dir)).filter((f) =>
+      f.endsWith(".hbs")
+    );
 
     await Promise.all(
       hbsFiles.map(async (full) => {
@@ -69,14 +66,9 @@ export class RepositoryLoader {
         const raw = await fs.readFile(full, "utf8");
         try {
           const { data, content } = matter(raw);
-          // Передаём контент как есть, без удаления отступов:
-          const item = {
-            ...(data as object),
-            content,
-          } as T;
-          upsertFn(item);
+          upsertFn({ ...(data as object), content } as T);
         } catch (e) {
-          console.warn(`Не удалось разбить ${subdir}/${relative}:`, e);
+          console.warn(`Не удалось разобрать ${subdir}/${relative}:`, e);
         }
       })
     );
@@ -95,6 +87,9 @@ export class RepositoryLoader {
       ),
       this.loadFromHbs<IEntity>(baseDir, "_entities", (e) =>
         this.entitiesRepo.upsert(e)
+      ),
+      this.loadFromHbs<IPreset>(baseDir, "_e.presets", (p) =>
+        this.presetsRepo.upsert(p)
       ),
     ]);
   }
