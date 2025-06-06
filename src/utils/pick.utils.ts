@@ -1,53 +1,59 @@
 // src/utils/pick.utils.ts
-import * as vscode from "vscode";
+import { QuickPickService } from "./quick-pick.service";
 import { IEntity } from "../interfaces/entities/entity.interface";
 import { IScript } from "../interfaces/entities/script.interface";
 import { ITemplate } from "../interfaces/entities/template.interface";
 import { NO_ENTITY_LABEL } from "../interfaces";
 import { isTemplateApplicable } from "./template-applicability.util";
 
-/* ----------- выбор скриптов ----------- */
+/* ---------- универсальный выбор строк ---------- */
+export async function pickStrings(
+  values: string[],
+  placeHolder: string
+): Promise<string[]> {
+  return QuickPickService.pickStrings(values, placeHolder);
+}
+
+/* ---------- выбор скриптов ---------- */
 export async function pickScripts(
   scripts: IScript[],
   placeHolder: string
 ): Promise<IScript[]> {
-  const sorted = [...scripts].sort((a, b) =>
-    a.name.localeCompare(b.name, "ru", { numeric: true, sensitivity: "base" })
+  const pickedNames = await pickStrings(
+    scripts.map((s) => s.name),
+    placeHolder
   );
-  const items = sorted.map((s) => ({ label: s.name }));
-  const picked = await vscode.window.showQuickPick(items, {
-    canPickMany: true,
-    placeHolder,
-  });
-  if (!picked?.length) throw new Error("Не выбраны скрипты");
-  return picked.map((p) => sorted.find((s) => s.name === p.label)!);
+  return pickedNames.map((name) => scripts.find((s) => s.name === name)!);
 }
 
-/* ----------- выбор сущностей ----------- */
+/* ---------- выбор сущностей (с опцией «Без сущности») ---------- */
 export async function pickEntities(
   entities: IEntity[],
   placeHolder: string
 ): Promise<(IEntity | undefined)[]> {
-  const sorted = [...entities].sort((a, b) =>
-    a.name.localeCompare(b.name, "ru", { numeric: true, sensitivity: "base" })
-  );
-  const choices = [
-    { label: NO_ENTITY_LABEL, description: "Без сущности" },
-    ...sorted.map((e) => ({ label: e.name })),
-  ];
-  const picked = await vscode.window.showQuickPick(choices, {
-    canPickMany: true,
-    placeHolder,
-  });
-  if (!picked?.length) throw new Error("Не выбраны сущности");
-  return picked.map((p) =>
-    p.label === NO_ENTITY_LABEL
+  const list = [NO_ENTITY_LABEL, ...entities.map((e) => e.name)];
+  const picked = await pickStrings(list, placeHolder);
+
+  return picked.map((name) =>
+    name === NO_ENTITY_LABEL
       ? undefined
-      : sorted.find((e) => e.name === p.label)!
+      : entities.find((e) => e.name === name)!
   );
 }
 
-/* ----------- выбор шаблонов ----------- */
+/* ---------- выбор сущностей ТОЛЬКО из переданного списка (без «Без сущности») ---------- */
+export async function pickEntitiesWithPresets(
+  entities: IEntity[],
+  placeHolder: string
+): Promise<IEntity[]> {
+  const pickedNames = await pickStrings(
+    entities.map((e) => e.name),
+    placeHolder
+  );
+  return pickedNames.map((name) => entities.find((e) => e.name === name)!);
+}
+
+/* ---------- выбор шаблонов ---------- */
 export async function pickTemplates(
   templates: ITemplate[],
   scripts: IScript[],
@@ -58,14 +64,18 @@ export async function pickTemplates(
     scripts.some((s) => entities.some((e) => isTemplateApplicable(tpl, s, e)))
   );
 
-  const items = filtered.map((t) => ({
-    label: t.key,
-    description: t.description,
-  }));
-  const picked = await vscode.window.showQuickPick(items, {
-    canPickMany: true,
-    placeHolder,
-  });
-  if (!picked?.length) throw new Error("Не выбраны шаблоны");
-  return picked.map((p) => filtered.find((t) => t.key === p.label)!);
+  const pickedKeys = await pickStrings(
+    filtered.map((t) => t.key),
+    placeHolder
+  );
+
+  return pickedKeys.map((k) => filtered.find((t) => t.key === k)!);
+}
+
+/* ---------- выбор ключей пресетов ---------- */
+export async function pickPresetKeys(
+  presetKeys: string[],
+  placeHolder: string
+): Promise<string[]> {
+  return pickStrings(presetKeys, placeHolder);
 }
