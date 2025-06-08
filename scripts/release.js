@@ -21,7 +21,7 @@ rl.question(`Введите описание изменений для ${release
     // 2) bump версии и коммитим всё одним коммитом с вашим сообщением
     //    --force чтобы не ругался на "грязное" дерево
     execSync(
-      `npm version ${releaseType} --force -m "chore(release): v%s — ${msg.replace(/"/g, '\\"')}"`,
+      `npm version ${releaseType} --force -m "v%s — ${msg.replace(/"/g, '\\"')}"`,
       { stdio: 'inherit' }
     )
     // 3) билд
