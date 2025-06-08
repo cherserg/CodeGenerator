@@ -8,10 +8,15 @@ import { showWarning, showInfo } from "../utils/vscode.utils";
 
 /**
  * Сервис синхронизации index.ts во всех подпапках заданного корня.
- * Возвращает `true`, если хотя бы один файл был успешно перезаписан.
+ * Создаёт резервную копию и перезаписывает файл **только** если
+ * «тело» (контент без шапки-комментария) действительно изменилось.
  */
 export class SyncIndexService {
-  /** Запускает обход и синхронизацию для всего дерева начиная с rootDir */
+  /* ------------------------------------------------------------------ */
+  /* -------------------------  public API  --------------------------- */
+  /* ------------------------------------------------------------------ */
+
+  /** Обходит всё дерево от rootDir рекурсивно. */
   public async run(rootDir: string): Promise<boolean> {
     const allFolders = await this.getAllSubfolders(rootDir);
     if (!allFolders.length) {
@@ -19,33 +24,12 @@ export class SyncIndexService {
       return false;
     }
 
-    let anySuccess = false;
-
-    for (const dir of allFolders) {
-      try {
-        const { folders, tsFiles } = await this.collectModules(dir);
-        const newContent = this.generateContent(folders, tsFiles);
-
-        const indexPath = path.join(dir, "index.ts");
-        await this.backupIfExists(indexPath);
-        await this.writeFormatted(indexPath, newContent);
-
-        anySuccess = true;
-      } catch (err: any) {
-        showWarning(`Не удалось обработать папку "${dir}": ${err.message}`);
-      }
-    }
-
-    if (anySuccess) {
-      showInfo("Синхронизация index.ts завершена.");
-    }
-
-    return anySuccess;
+    return this.syncFolders(allFolders);
   }
 
   /**
-   * Запускает синхронизацию только для указанных в folders папок (без рекурсии).
-   * Возвращает `true`, если хотя бы один файл был успешно перезаписан.
+   * Синхронизирует index.ts только в указанных директориях
+   * (без рекурсивного обхода их потомков).
    */
   public async runOnFolders(foldersToSync: string[]): Promise<boolean> {
     if (!foldersToSync.length) {
@@ -53,35 +37,72 @@ export class SyncIndexService {
       return false;
     }
 
-    let anySuccess = false;
+    return this.syncFolders(foldersToSync);
+  }
 
-    for (const dir of foldersToSync) {
+  /* ------------------------------------------------------------------ */
+  /* ------------------------  core routine  -------------------------- */
+  /* ------------------------------------------------------------------ */
+
+  /** Основная логика синхронизации для набора папок. */
+  private async syncFolders(folders: string[]): Promise<boolean> {
+    let anyChanged = false;
+
+    for (const dir of folders) {
       try {
-        const { folders, tsFiles } = await this.collectModules(dir);
-        const newContent = this.generateContent(folders, tsFiles);
-
+        const { folders: sub, tsFiles } = await this.collectModules(dir);
+        const rawNewContent = this.generateContent(sub, tsFiles);
         const indexPath = path.join(dir, "index.ts");
-        await this.backupIfExists(indexPath);
-        await this.writeFormatted(indexPath, newContent);
 
-        anySuccess = true;
+        // Приводим новое содержимое в тот же формат, что и существующее
+        const formattedNew = await this.formatWithPrettier(
+          indexPath,
+          rawNewContent
+        );
+
+        // Пытаемся прочитать существующий index.ts
+        let existingRaw: string | null = null;
+        try {
+          existingRaw = await fs.readFile(indexPath, "utf8");
+        } catch {
+          /* файла нет — значит точно нужно создавать */
+        }
+
+        if (existingRaw !== null) {
+          const oldBody = this.stripHeader(existingRaw);
+          const newBody = this.stripHeader(formattedNew);
+
+          // Если «тела» совпадают, пропускаем запись и бэкап
+          if (oldBody === newBody) {
+            continue;
+          }
+        }
+
+        // Контент изменился — бэкапим и записываем
+        await this.backupIfExists(indexPath);
+        await fs.writeFile(indexPath, formattedNew, "utf8");
+
+        anyChanged = true;
       } catch (err: any) {
         showWarning(`Не удалось обработать папку "${dir}": ${err.message}`);
       }
     }
 
-    if (anySuccess) {
+    if (anyChanged) {
       showInfo("Синхронизация index.ts завершена.");
+    } else {
+      showInfo("index.ts уже актуальны. Изменений не обнаружено.");
     }
 
-    return anySuccess;
+    // Возвращаем true даже если изменений нет: операция завершилась успешно
+    return true;
   }
 
   /* ------------------------------------------------------------------ */
   /* --------------------------  helpers  ----------------------------- */
   /* ------------------------------------------------------------------ */
 
-  /** Рекурсивно собирает все подпапки (включая сам root) */
+  /** Рекурсивно собирает все подпапки (включая сам root). */
   private async getAllSubfolders(dir: string): Promise<string[]> {
     let results: string[] = [dir];
     let entries: Dirent[];
@@ -102,7 +123,7 @@ export class SyncIndexService {
     return results;
   }
 
-  /** Возвращает списки подпапок и .ts-файлов (кроме index.ts) */
+  /** Возвращает списки подпапок и .ts-файлов (кроме index.ts). */
   private async collectModules(dir: string): Promise<{
     folders: string[];
     tsFiles: string[];
@@ -129,9 +150,8 @@ export class SyncIndexService {
     return { folders, tsFiles };
   }
 
-  /** Формирует итоговый текст index.ts */
+  /** Формирует итоговый текст index.ts (с шапкой-комментарием). */
   private generateContent(folders: string[], tsFiles: string[]): string {
-    // Если в папке нет ни подпапок, ни .ts-файлов, пишем export * from '.';
     if (folders.length === 0 && tsFiles.length === 0) {
       return (
         "// Этот файл сгенерирован автоматически. Не редактируйте вручную.\n" +
@@ -150,7 +170,20 @@ export class SyncIndexService {
     return lines.join("\n");
   }
 
-  /** Делаем бэкап, если index.ts уже существует */
+  /**
+   * Удаляет верхние подряд идущие строки-комментарии (`// ...`)
+   * и возвращает «чистое» тело файла.
+   */
+  private stripHeader(content: string): string {
+    const lines = content.split("\n");
+    let i = 0;
+    while (i < lines.length && lines[i].trim().startsWith("//")) {
+      i++;
+    }
+    return lines.slice(i).join("\n").trim();
+  }
+
+  /** Делает бэкап index.ts, если он существует. */
   private async backupIfExists(indexPath: string): Promise<void> {
     try {
       await fs.access(indexPath);
@@ -173,29 +206,26 @@ export class SyncIndexService {
     await fs.copyFile(indexPath, bakPath);
   }
 
-  /** Форматируем через Prettier и записываем файл */
-  private async writeFormatted(
-    indexPath: string,
+  /** Форматирует текст через Prettier с учётом локального конфига. */
+  private async formatWithPrettier(
+    filePath: string,
     content: string
-  ): Promise<void> {
+  ): Promise<string> {
     let prettierConfig: prettier.Options | null = null;
     try {
-      prettierConfig = await prettier.resolveConfig(indexPath);
+      prettierConfig = await prettier.resolveConfig(filePath);
     } catch {
       /* ignore */
     }
 
-    let formatted: string;
     try {
-      formatted = await prettier.format(content, {
+      return await prettier.format(content, {
         ...prettierConfig,
         parser: "typescript",
-        filepath: indexPath,
+        filepath: filePath,
       });
     } catch {
-      formatted = content;
+      return content; // если Prettier упал — возвращаем как есть
     }
-
-    await fs.writeFile(indexPath, formatted, "utf8");
   }
 }
