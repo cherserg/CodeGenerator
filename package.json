@@ -35,7 +35,8 @@
     "onCommand:codegenerator.generateDocs",
     "onCommand:codegenerator.generateFromPreset",
     "onCommand:codegenerator.restoreFromBackup",
-    "onCommand:codegenerator.syncIndex"
+    "onCommand:codegenerator.syncIndex",
+    "onWillSaveTextDocument"
   ],
   "repository": {
     "type": "git",
@@ -47,7 +48,11 @@
     "watch": "tsc -watch -p .",
     "package": "vsce package",
     "pretest": "npm run compile",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "preversion": "git add -A",
+    "release:patch": "git add -A && git commit -m \"chore(release): подготовка релиза\" && npm version patch -m \"chore(release): v%s\" && npm run compile && git push origin HEAD --follow-tags",
+    "release:minor": "git add -A && git commit -m \"chore(release): подготовка релиза\" && npm version minor -m \"chore(release): v%s\" && npm run compile && git push origin HEAD --follow-tags",
+    "release:major": "git add -A && git commit -m \"chore(release): подготовка релиза\" && npm version major -m \"chore(release): v%s\" && npm run compile && git push origin HEAD --follow-tags"
   },
   "files": [
     "out",

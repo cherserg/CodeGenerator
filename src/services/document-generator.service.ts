@@ -14,8 +14,7 @@ export class DocumentGeneratorService {
     // Берём основной контент шаблона
     let raw = template.content || "";
 
-    // 1) Обработаем «динамические» include’ы вида {{> {{pathName}}-controller-part}},
-    //    беря именно entityVars["pathName"]
+    // 1) Обработаем «динамические» include’ы вида {{> {{pathName}}-controller-part}}
     raw = raw.replace(
       /{{>\s*{{\s*(\w+)\s*}}\s*-\s*([^\s}]+)\s*}}/g,
       (_match, varName, suffix) => {
@@ -24,20 +23,17 @@ export class DocumentGeneratorService {
       }
     );
 
-    // 2) Подставляем все переменные {{KEY}} — теперь entityVars перезаписывают scriptVars,
-    //    чтобы {{pathName}} ссылался на сущность, а не на скрипт
+    // 2) Подставляем все переменные {{KEY}}
     const vars = { ...scriptVars, ...entityVars };
     raw = raw.replace(/{{\s*(\w+)\s*}}/g, (_match, key) => vars[key] ?? "");
 
-    // 3) Разворачиваем include-подшаблоны {{> partKey}}, пропуская отсутствующие части
+    // 3) Разворачиваем include-подшаблоны {{> partKey}}
     raw = raw.replace(/{{>\s*([^\s}]+)\s*}}/g, (_match, partKey) => {
       const part = this.partRepo.getByKey(partKey);
       return part ? part.content : "";
     });
 
-    // Добавляем шапку во все сгенерированные документы:
-    const header =
-      "// Этот файл сгенерирован автоматически. Не редактируйте вручную.\n\n";
-    return header + raw;
+    // Возвращаем без заголовка — он добавится при сохранении
+    return raw;
   }
 }
