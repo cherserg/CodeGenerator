@@ -1,5 +1,3 @@
-// src/services/sync-index.service.ts
-
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
@@ -8,7 +6,7 @@ import { showWarning, showInfo } from "../utils/vscode.utils";
 
 /**
  * Сервис синхронизации index.ts во всех подпапках заданного корня.
- * Теперь не добавляет заголовок — он вставится при сохранении.
+ * Теперь при отсутствии модулей вставляет заглушку export * from '.';
  */
 export class SyncIndexService {
   public async run(rootDir: string): Promise<boolean> {
@@ -110,11 +108,21 @@ export class SyncIndexService {
     return { folders, tsFiles };
   }
 
+  /**
+   * Генерирует содержимое index.ts:
+   * - если есть папки или файлы, перечисляет export-строки;
+   * - если ничего нет — отдаёт заглушку export * from '.';
+   */
   private generateContent(folders: string[], tsFiles: string[]): string {
+    // Когда нет ни папок, ни файлов — вставляем заглушку
+    if (folders.length === 0 && tsFiles.length === 0) {
+      return `export * from '.';\n`;
+    }
+
     const lines = [
       ...folders.map((f) => `export * from './${f}';`),
       ...tsFiles.map((f) => `export * from './${f}';`),
-      "",
+      "", // пустая строка в конце
     ];
     return lines.join("\n");
   }
