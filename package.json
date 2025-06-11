@@ -2,7 +2,7 @@
   "name": "code-generator",
   "displayName": "CodeGenerator",
   "description": "Генерирует код и документацию на основе YAML-шаблонов",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "publisher": "cherserg",
   "engines": {
     "vscode": "^1.65.0"
@@ -65,6 +65,7 @@
     "vscode": "^1.1.37"
   },
   "dependencies": {
+    "@types/minimatch": "^5.1.2",
     "gray-matter": "^4.0.3",
     "prettier": "^3.5.3",
     "yaml": "^2.8.0"

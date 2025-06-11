@@ -1,14 +1,18 @@
+// src/services/sync-index.service.ts
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
 import prettier from "prettier";
 import { showWarning, showInfo } from "../utils/vscode.utils";
+import minimatch from "minimatch";
 
 /**
  * Сервис синхронизации index.ts во всех подпапках заданного корня.
- * Теперь при отсутствии модулей вставляет заглушку export * from '.';
+ * Позволяет игнорировать папки по glob-маскам.
  */
 export class SyncIndexService {
+  constructor(private ignorePatterns: string[] = []) {}
+
   public async run(rootDir: string): Promise<boolean> {
     const allFolders = await this.getAllSubfolders(rootDir);
     if (!allFolders.length) {
@@ -24,6 +28,27 @@ export class SyncIndexService {
       return false;
     }
     return this.syncFolders(foldersToSync);
+  }
+
+  private async getAllSubfolders(dir: string): Promise<string[]> {
+    // Если путь попадает под любую из масок — пропускаем всё поддерево
+    if (this.ignorePatterns.some((pat) => minimatch(dir, pat))) {
+      return [];
+    }
+    let results: string[] = [dir];
+    let entries: Dirent[];
+    try {
+      entries = (await fs.readdir(dir, { withFileTypes: true })) as Dirent[];
+    } catch {
+      return results;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const sub = path.join(dir, entry.name);
+        results = results.concat(await this.getAllSubfolders(sub));
+      }
+    }
+    return results;
   }
 
   private async syncFolders(folders: string[]): Promise<boolean> {
@@ -68,24 +93,6 @@ export class SyncIndexService {
     return true;
   }
 
-  private async getAllSubfolders(dir: string): Promise<string[]> {
-    let results: string[] = [dir];
-    let entries: Dirent[];
-    try {
-      entries = (await fs.readdir(dir, { withFileTypes: true })) as Dirent[];
-    } catch {
-      return results;
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        results = results.concat(
-          await this.getAllSubfolders(path.join(dir, entry.name))
-        );
-      }
-    }
-    return results;
-  }
-
   private async collectModules(
     dir: string
   ): Promise<{ folders: string[]; tsFiles: string[] }> {
@@ -108,27 +115,19 @@ export class SyncIndexService {
     return { folders, tsFiles };
   }
 
-  /**
-   * Генерирует содержимое index.ts:
-   * - если есть папки или файлы, перечисляет export-строки;
-   * - если ничего нет — отдаёт заглушку export * from '.';
-   */
   private generateContent(folders: string[], tsFiles: string[]): string {
-    // Когда нет ни папок, ни файлов — вставляем заглушку
     if (folders.length === 0 && tsFiles.length === 0) {
       return `export * from '.';\n`;
     }
-
     const lines = [
       ...folders.map((f) => `export * from './${f}';`),
       ...tsFiles.map((f) => `export * from './${f}';`),
-      "", // пустая строка в конце
+      "",
     ];
     return lines.join("\n");
   }
 
   private stripHeader(content: string): string {
-    // Удаляем любые первые строки-комментарии (заголовок/путь), чтобы сравнивать только тело
     const lines = content.split("\n");
     let i = 0;
     while (i < lines.length && lines[i].trim().startsWith("//")) i++;

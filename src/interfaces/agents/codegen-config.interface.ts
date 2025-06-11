@@ -1,5 +1,4 @@
 // src/interfaces/agents/codegen-config.interface.ts
-
 import { TExtension } from "../entities/gen-request.interface";
 
 export interface ICodegenConfig {
@@ -8,6 +7,11 @@ export interface ICodegenConfig {
   outputExt: TExtension;
   /** Порядок сегментов пути */
   pathOrder?: Array<"entity" | "script">;
+  /**
+   * Пути (или glob-маски относительно outputPath) папок,
+   * которые не синхронизировать (вместе с их поддиректориями).
+   */
+  ignoreSync?: string[];
 }
 
 export const DEFAULT_CONFIG: ICodegenConfig = {
@@ -15,6 +19,7 @@ export const DEFAULT_CONFIG: ICodegenConfig = {
   outputPath: "src/generated",
   outputExt: ".ts",
   pathOrder: ["entity", "script"],
+  ignoreSync: [],
 };
 
 export const NO_ENTITY_LABEL = "__NO_ENTITY__";
