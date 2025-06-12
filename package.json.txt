@@ -2,7 +2,7 @@
   "name": "code-generator",
   "displayName": "CodeGenerator",
   "description": "Генерирует код и документацию на основе YAML-шаблонов",
-  "version": "0.1.12",
+  "version": "0.1.11",
   "publisher": "cherserg",
   "engines": {
     "vscode": "^1.65.0"
@@ -11,11 +11,6 @@
     "Other"
   ],
   "main": "./out/extension.js",
-  "activationEvents": [
-    "onStartupFinished",
-    "onLanguage:typescript",
-    "onLanguage:javascript"
-  ],
   "contributes": {
     "commands": [
       {
@@ -36,6 +31,13 @@
       }
     ]
   },
+  "activationEvents": [
+    "onCommand:codegenerator.generateDocs",
+    "onCommand:codegenerator.generateFromPreset",
+    "onCommand:codegenerator.restoreFromBackup",
+    "onCommand:codegenerator.syncIndex",
+    "onWillSaveTextDocument"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/cherserg/CodeGenerator.git"

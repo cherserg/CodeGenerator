@@ -1,108 +1,92 @@
-// src/services/file-creator.service.ts
 import * as fs from "fs/promises";
 import * as path from "path";
 import prettier from "prettier";
 
 export class FileCreatorService {
   /**
-   * Сохраняет строку content в файл outDir/fileName.
-   * Если файл существует и его содержимое (после форматирования) отличается от нового,
-   * сначала сохраняет копию старого в .bak.<timestamp>, затем записывает отформатированный.
+   * Сохраняет `content` в `outDir/fileName`.
+   * Если передан `workspaceRoot`, то в начало файла добавляется строка
+   *   // Path: относительный/путь/к/файлу
+   * ещё ДО форматирования и записи.
+   *
+   * При отличии содержимого создаётся резервная копия (.bak.YYYYMMDDTHHMMSS).
    */
   public async save(
     outDir: string,
     fileName: string,
-    content: string
+    content: string,
+    workspaceRoot?: string
   ): Promise<void> {
-    // 1. Убедиться, что директория существует
+    /* ───── 1. гарантируем существование каталога ───── */
     await fs.mkdir(outDir, { recursive: true });
     const fullPath = path.join(outDir, fileName);
 
-    // 2. Найти конфиг Prettier (если есть)
-    let prettierConfig: prettier.Options | null = null;
+    /* ───── 2. добавляем строку “// Path: …” при необходимости ───── */
+    let body = content;
+    if (workspaceRoot) {
+      const rel = path.relative(workspaceRoot, fullPath).replace(/\\/g, "/");
+      body = `// Path: ${rel}\n\n${content}`;
+    }
+
+    /* ───── 3. находим конфиг Prettier ───── */
+    let prettierCfg: prettier.Options | null = null;
     try {
-      prettierConfig = await prettier.resolveConfig(fullPath);
+      prettierCfg = await prettier.resolveConfig(fullPath);
     } catch {
-      // игнорируем ошибки поиска конфига
+      /* игнорируем ошибки */
     }
 
-    // 3. Определить парсер по расширению
+    /* ───── 4. выбираем парсер по расширению ───── */
     const ext = path.extname(fileName).toLowerCase();
-    let parser: prettier.BuiltInParserName;
-    switch (ext) {
-      case ".ts":
-      case ".tsx":
-        parser = "typescript";
-        break;
-      case ".js":
-      case ".jsx":
-        parser = "babel";
-        break;
-      case ".json":
-        parser = "json";
-        break;
-      case ".css":
-      case ".scss":
-        parser = "css";
-        break;
-      case ".md":
-        parser = "markdown";
-        break;
-      default:
-        parser = "babel";
-    }
+    const parser: prettier.BuiltInParserName =
+      ext === ".ts" || ext === ".tsx"
+        ? "typescript"
+        : ext === ".js" || ext === ".jsx"
+          ? "babel"
+          : ext === ".json"
+            ? "json"
+            : ext === ".css" || ext === ".scss"
+              ? "css"
+              : ext === ".md"
+                ? "markdown"
+                : "babel";
 
-    // 4. Отформатировать контент через Prettier
+    /* ───── 5. форматируем ───── */
     let formatted: string;
     try {
-      formatted = await prettier.format(content, {
-        ...prettierConfig,
+      formatted = await prettier.format(body, {
+        ...prettierCfg,
         parser,
         filepath: fullPath,
       });
     } catch {
-      // если форматирование не удалось, используем оригинал
-      formatted = content;
+      formatted = body;
     }
 
-    // 5. Проверить, нужно ли делать бэкап: сравнить уже существующий файл с новым отформатированным
-    let shouldBackup = false;
+    /* ───── 6. бэкап при изменении ───── */
+    let needBackup = false;
     try {
-      const existing = await fs.readFile(fullPath, "utf-8");
-      if (existing !== formatted) {
-        shouldBackup = true;
-      } else {
-        console.log(`No changes in ${fullPath}, backup skipped`);
-      }
-    } catch (err: any) {
-      if (err.code !== "ENOENT") {
-        // какая-то другая ошибка доступа — пробрасываем
-        throw err;
-      }
-      // ENOENT — файла нет, бэкап не нужен
+      const old = await fs.readFile(fullPath, "utf-8");
+      needBackup = old !== formatted;
+    } catch (e: any) {
+      if (e.code !== "ENOENT") throw e; // другие ошибки пробрасываем
     }
 
-    // 6. Если нужно, сделать резервную копию с меткой времени
-    if (shouldBackup) {
+    if (needBackup) {
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, "0");
-      const ts =
-        now.getFullYear().toString() +
+      const stamp =
+        now.getFullYear() +
         pad(now.getMonth() + 1) +
         pad(now.getDate()) +
         "T" +
         pad(now.getHours()) +
         pad(now.getMinutes()) +
         pad(now.getSeconds());
-
-      const bakFileName = `${fileName}.bak.${ts}`;
-      const bakPath = path.join(outDir, bakFileName);
-      await fs.copyFile(fullPath, bakPath);
-      console.log(`Backup created: ${bakPath}`);
+      await fs.copyFile(fullPath, `${fullPath}.bak.${stamp}`);
     }
 
-    // 7. Записать (или перезаписать) файл уже отформатированным содержимым
+    /* ───── 7. запись файла ───── */
     await fs.writeFile(fullPath, formatted, "utf-8");
-    console.log(`File written to ${fullPath}`);
   }
 }

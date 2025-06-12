@@ -1,84 +1,145 @@
-// src/services/sync-index.service.ts
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
 import prettier from "prettier";
 import { showWarning, showInfo } from "../utils/vscode.utils";
-import minimatch from "minimatch";
 
 /**
- * Сервис синхронизации index.ts во всех подпапках заданного корня.
- * Позволяет игнорировать папки по glob-маскам.
+ * Сервис синхронизации index.ts во всех подпапках baseDir.
+ * Учитывает исключения из codegen.json → ignoreSync.
  */
 export class SyncIndexService {
-  constructor(private ignorePatterns: string[] = []) {}
+  /** Абсолютные пути, которые нужно пропускать целиком */
+  private readonly absIgnores: string[];
+  /** Относительные glob-маски для игнорирования */
+  private readonly masks: string[];
 
-  public async run(rootDir: string): Promise<boolean> {
-    const allFolders = await this.getAllSubfolders(rootDir);
-    if (!allFolders.length) {
-      showWarning(`В папке "${rootDir}" не найдено ни одной директории.`);
-      return false;
-    }
-    return this.syncFolders(allFolders);
+  /**
+   * @param baseDir        Абсолютный путь к корню сгенерированных файлов
+   * @param ignorePatterns Массив путей или glob-масок из codegen.json
+   */
+  constructor(
+    private baseDir: string,
+    ignorePatterns: string[] = []
+  ) {
+    // Нормализуем baseDir
+    this.baseDir = this.baseDir.replace(/\\/g, "/").replace(/\/+$/, "");
+
+    // Разделяем абсолютные пути и относительные маски
+    this.absIgnores = ignorePatterns
+      .filter((p) => path.isAbsolute(p))
+      .map((p) => p.replace(/\\/g, "/").replace(/\/+$/, ""));
+
+    this.masks = ignorePatterns
+      .filter((p) => !path.isAbsolute(p))
+      .map((p) => p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""));
   }
 
-  public async runOnFolders(foldersToSync: string[]): Promise<boolean> {
-    if (!foldersToSync.length) {
-      showWarning("Не выбраны папки для синхронизации.");
-      return false;
-    }
-    return this.syncFolders(foldersToSync);
+  /* ────────────── ПУБЛИЧНЫЕ МЕТОДЫ ────────────── */
+
+  /** Полная синхронизация всего дерева baseDir. */
+  public async run(): Promise<boolean> {
+    const all = await this.collectAllSubfolders(this.baseDir);
+    return this.syncFolders(all);
   }
 
-  private async getAllSubfolders(dir: string): Promise<string[]> {
-    // Если путь попадает под любую из масок — пропускаем всё поддерево
-    if (this.ignorePatterns.some((pat) => minimatch(dir, pat))) {
-      return [];
+  /**
+   * Синхронизация только указанных директорий (абсолютные пути).
+   */
+  public async runOnFolders(folders: string[]): Promise<boolean> {
+    const filtered = folders.filter((abs) => !this.isIgnored(abs));
+    return this.syncFolders(filtered);
+  }
+
+  /** Проверка, подпадает ли путь под ignoreSync. */
+  public isIgnored(absPath: string): boolean {
+    const absNorm = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
+
+    // 1) Абсолютные исключения
+    for (const ig of this.absIgnores) {
+      if (absNorm === ig || absNorm.startsWith(ig + "/")) {
+        return true;
+      }
     }
-    let results: string[] = [dir];
+
+    // 2) Относительный путь внутри baseDir
+    const rel = path
+      .relative(this.baseDir, absNorm)
+      .replace(/\\/g, "/")
+      .replace(/\/+$/, "");
+
+    if (!rel) {
+      // это сам baseDir
+      return false;
+    }
+
+    // 3) Glob-маски по относительному пути
+    for (const mask of this.masks) {
+      const body = this.globBody(mask);
+      if (new RegExp(`^${body}$`).test(rel)) return true; // точное
+      if (new RegExp(`${body}$`).test(absNorm)) return true; // суффикс
+      if (new RegExp(`(^|/)${body}(/|$)`).test(absNorm)) return true; // внутри
+    }
+
+    return false;
+  }
+
+  /* ────────────── ВНУТРЕННЯЯ ЛОГИКА ────────────── */
+
+  private async collectAllSubfolders(dir: string): Promise<string[]> {
+    const result: string[] = [];
+    if (this.isIgnored(dir)) return result;
+    result.push(dir);
+
     let entries: Dirent[];
     try {
-      entries = (await fs.readdir(dir, { withFileTypes: true })) as Dirent[];
+      entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
-      return results;
+      return result;
     }
+
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const sub = path.join(dir, entry.name);
-        results = results.concat(await this.getAllSubfolders(sub));
+        result.push(...(await this.collectAllSubfolders(sub)));
       }
     }
-    return results;
+
+    return result;
   }
 
   private async syncFolders(folders: string[]): Promise<boolean> {
+    if (!folders.length) {
+      showWarning("Нет директорий для синхронизации.");
+      return false;
+    }
+
     let anyChanged = false;
 
     for (const dir of folders) {
+      if (this.isIgnored(dir)) continue;
+
       try {
         const { folders: sub, tsFiles } = await this.collectModules(dir);
-        const rawNewContent = this.generateContent(sub, tsFiles);
-        const indexPath = path.join(dir, "index.ts");
-        const formattedNew = await this.formatWithPrettier(
-          indexPath,
-          rawNewContent
-        );
+        const raw = this.generateContent(sub, tsFiles);
+        const idx = path.join(dir, "index.ts");
+        const fmt = await this.formatWithPrettier(idx, raw);
 
-        let existingRaw: string | null = null;
+        let existing: string | null = null;
         try {
-          existingRaw = await fs.readFile(indexPath, "utf8");
+          existing = await fs.readFile(idx, "utf8");
         } catch {
-          /* нет файла */
+          // файла нет — создаём
         }
 
-        if (existingRaw !== null) {
-          const oldBody = this.stripHeader(existingRaw);
-          const newBody = this.stripHeader(formattedNew);
+        if (existing !== null) {
+          const oldBody = this.stripHeader(existing);
+          const newBody = this.stripHeader(fmt);
           if (oldBody === newBody) continue;
         }
 
-        await this.backupIfExists(indexPath);
-        await fs.writeFile(indexPath, formattedNew, "utf8");
+        await this.backupIfExists(idx);
+        await fs.writeFile(idx, fmt, "utf8");
         anyChanged = true;
       } catch (err: any) {
         showWarning(`Не удалось обработать папку "${dir}": ${err.message}`);
@@ -93,14 +154,22 @@ export class SyncIndexService {
     return true;
   }
 
+  /* ────────────── УТИЛИТЫ ────────────── */
+
+  private globBody(mask: string): string {
+    return mask
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*\*/g, "§§DOUBLE§§")
+      .replace(/\*/g, "[^/]*")
+      .replace(/§§DOUBLE§§/g, ".*");
+  }
+
   private async collectModules(
     dir: string
   ): Promise<{ folders: string[]; tsFiles: string[] }> {
-    const dirents = (await fs.readdir(dir, {
-      withFileTypes: true,
-    })) as Dirent[];
+    const dirents = await fs.readdir(dir, { withFileTypes: true });
     const folders = dirents
-      .filter((d) => d.isDirectory())
+      .filter((d) => d.isDirectory() && !this.isIgnored(path.join(dir, d.name)))
       .map((d) => d.name)
       .sort((a, b) => a.localeCompare(b));
     const tsFiles = dirents
@@ -119,12 +188,11 @@ export class SyncIndexService {
     if (folders.length === 0 && tsFiles.length === 0) {
       return `export * from '.';\n`;
     }
-    const lines = [
+    return [
       ...folders.map((f) => `export * from './${f}';`),
       ...tsFiles.map((f) => `export * from './${f}';`),
       "",
-    ];
-    return lines.join("\n");
+    ].join("\n");
   }
 
   private stripHeader(content: string): string {
@@ -157,13 +225,13 @@ export class SyncIndexService {
     filePath: string,
     content: string
   ): Promise<string> {
-    let prettierConfig = null;
+    let cfg = null;
     try {
-      prettierConfig = await prettier.resolveConfig(filePath);
+      cfg = await prettier.resolveConfig(filePath);
     } catch {}
     try {
       return await prettier.format(content, {
-        ...(prettierConfig || {}),
+        ...(cfg || {}),
         parser: "typescript",
         filepath: filePath,
       });

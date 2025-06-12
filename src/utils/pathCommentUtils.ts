@@ -1,12 +1,14 @@
-// src/utils/pathCommentUtils.ts
-
 import * as vscode from "vscode";
 import * as path from "path";
 
 /**
- * Вставляет или обновляет в начале документа:
- * 1) "// Этот файл создан автоматически. Не редактируйте вручную."
- * 2) "// Path: относительный/путь"
+ * Обеспечивает наличие строки
+ *   // Path: относительный/путь/к/файлу
+ * в самом верху документа.
+ *
+ * • Если строка уже актуальна — правки не требуются.
+ * • Любые старые комментарии вида “// Path:” или
+ *   “// Этот файл создан автоматически…” в первых двух строках удаляются.
  */
 export function prepareSaveCommentsEdits(
   doc: vscode.TextDocument,
@@ -14,52 +16,30 @@ export function prepareSaveCommentsEdits(
 ): vscode.TextEdit[] {
   const edits: vscode.TextEdit[] = [];
 
-  // относительный путь файла с прямыми слешами
-  const relPath = path
-    .relative(workspaceRoot, doc.uri.fsPath)
-    .replace(/\\/g, "/");
-  const headerLine =
-    "// Этот файл создан автоматически. Не редактируйте вручную.";
-  const pathLine = `// Path: ${relPath}`;
+  const rel = path.relative(workspaceRoot, doc.uri.fsPath).replace(/\\/g, "/");
+  const pathLine = `// Path: ${rel}`;
 
-  // Получаем первые две строки (если есть)
-  const firstLine = doc.lineAt(0);
-  const secondLine = doc.lineCount > 1 ? doc.lineAt(1) : null;
+  const first = doc.lineAt(0);
+  const second = doc.lineCount > 1 ? doc.lineAt(1) : null;
 
-  // Проверяем, есть ли уже наши комментарии
-  const hasHeader = firstLine.text.trim() === headerLine;
-  const hasPath = hasHeader
-    ? secondLine?.text.trim() === pathLine
-    : firstLine.text.trim() === pathLine;
+  /* строка уже актуальна — ничего делать не надо */
+  if (first.text.trim() === pathLine) return edits;
 
-  if (hasHeader && hasPath) {
-    // Обновляем обе строки, если что-то поменялось
-    edits.push(vscode.TextEdit.replace(firstLine.range, headerLine));
-    if (secondLine) {
-      edits.push(vscode.TextEdit.replace(secondLine.range, pathLine));
+  /* удаляем устаревшие комментарии в первых двух строках */
+  [first, second].forEach((l) => {
+    if (
+      l &&
+      (l.text.trim().startsWith("// Path:") ||
+        l.text.trim().startsWith("// Этот файл"))
+    ) {
+      edits.push(vscode.TextEdit.delete(l.rangeIncludingLineBreak));
     }
-  } else {
-    // Удаляем любые старые наши комментарии в первых двух строках
-    const rangesToRemove: vscode.Range[] = [];
-    [firstLine, secondLine].forEach((line) => {
-      if (
-        line &&
-        (line.text.startsWith("// Этот файл") ||
-          line.text.startsWith("// Path:"))
-      ) {
-        rangesToRemove.push(line.rangeIncludingLineBreak);
-      }
-    });
-    rangesToRemove.forEach((r) => edits.push(vscode.TextEdit.delete(r)));
+  });
 
-    // Вставляем новые две строки сверху
-    edits.push(
-      vscode.TextEdit.insert(
-        new vscode.Position(0, 0),
-        headerLine + "\n" + pathLine + "\n\n"
-      )
-    );
-  }
+  /* вставляем актуальную строку + пустую строку после неё */
+  edits.push(
+    vscode.TextEdit.insert(new vscode.Position(0, 0), `${pathLine}\n\n`)
+  );
 
   return edits;
 }

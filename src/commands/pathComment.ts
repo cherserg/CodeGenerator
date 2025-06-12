@@ -1,46 +1,50 @@
-// src/commands/pathComment.ts
-
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs/promises";
 import { prepareSaveCommentsEdits } from "../utils/pathCommentUtils";
 
 /**
- * При сохранении документа вставляет или обновляет в начале:
- * 1) "// Этот файл создан автоматически. Не редактируйте вручную."
- * 2) "// Path: относительный/путь"
- * Только для файлов с расширением commentExt из codegen.json (по умолчанию ".ts").
+ * При каждом сохранении .ts-файлов добавляет / обновляет строку
+ *   // Path: относительный/путь/к/файлу
+ * в самом начале документа.
+ *
+ * Расширение берётся из codegen.json → commentExt
+ * (по-умолчанию “.ts”, допускается запись без точки).
  */
+let cachedExt: string | null = null;
+async function getCommentExt(root: string): Promise<string> {
+  if (cachedExt !== null) return cachedExt;
+
+  let ext = ".ts";
+  try {
+    const raw = await fs.readFile(path.join(root, "codegen.json"), "utf8");
+    const cfg = JSON.parse(raw);
+    if (typeof cfg.commentExt === "string" && cfg.commentExt.trim()) {
+      ext = cfg.commentExt.trim();
+    }
+  } catch {
+    /* файл не найден / невалиден — используем дефолт */
+  }
+
+  cachedExt = ext.startsWith(".") ? ext : `.${ext}`;
+  return cachedExt;
+}
+
 export function registerPathCommentCommand(context: vscode.ExtensionContext) {
-  const disposable = vscode.workspace.onWillSaveTextDocument(async (e) => {
-    const doc = e.document;
-    const roots = vscode.workspace.workspaceFolders;
-    if (!roots || roots.length === 0) {
-      return;
-    }
-    const workspaceRoot = roots[0].uri.fsPath;
+  const disposable = vscode.workspace.onWillSaveTextDocument((e) => {
+    const editsPromise = (async () => {
+      const { document } = e;
+      const roots = vscode.workspace.workspaceFolders;
+      if (!roots || roots.length === 0) return [];
 
-    // читаем codegen.json и достаём commentExt, по умолчанию ".ts"
-    let commentExt = ".ts";
-    const cfgPath = path.join(workspaceRoot, "codegen.json");
-    try {
-      const raw = await fs.readFile(cfgPath, "utf8");
-      const cfg = JSON.parse(raw);
-      if (typeof cfg.commentExt === "string") {
-        commentExt = cfg.commentExt;
-      }
-    } catch {
-      // файл не найден или парсинг не удался — остаётся ".ts"
-    }
+      const root = roots[0].uri.fsPath;
+      if (path.extname(document.uri.fsPath) !== (await getCommentExt(root)))
+        return [];
 
-    // проверяем расширение сохраняемого файла
-    if (path.extname(doc.uri.fsPath) !== commentExt) {
-      return;
-    }
+      return prepareSaveCommentsEdits(document, root);
+    })();
 
-    // готовим и применяем правки
-    const edits = prepareSaveCommentsEdits(doc, workspaceRoot);
-    e.waitUntil(Promise.resolve(edits));
+    e.waitUntil(editsPromise);
   });
 
   context.subscriptions.push(disposable);

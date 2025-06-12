@@ -1,4 +1,3 @@
-// src/utils/read-config.util.ts
 import * as fs from "fs/promises";
 import * as path from "path";
 import {
@@ -13,8 +12,9 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
     const raw = await fs.readFile(cfgPath, "utf8");
     cfgRaw = JSON.parse(raw);
   } catch {
-    // если нет или невалид — вернём дефолт
+    /* нет файла или он не валиден – используем дефолт */
   }
+
   return {
     configFolder: cfgRaw.configFolder?.trim() || DEFAULT_CONFIG.configFolder,
     outputPath: cfgRaw.outputPath?.trim() || DEFAULT_CONFIG.outputPath,
@@ -24,8 +24,9 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
     pathOrder: Array.isArray(cfgRaw.pathOrder)
       ? cfgRaw.pathOrder
       : DEFAULT_CONFIG.pathOrder,
+    /* --------- новое поле --------- */
     ignoreSync: Array.isArray(cfgRaw.ignoreSync)
-      ? cfgRaw.ignoreSync.map((s) => s.trim())
-      : DEFAULT_CONFIG.ignoreSync!,
+      ? cfgRaw.ignoreSync
+      : DEFAULT_CONFIG.ignoreSync,
   };
 }

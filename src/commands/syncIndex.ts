@@ -1,9 +1,7 @@
-// src/commands/syncIndex.ts
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import minimatch from "minimatch";
 import { registerCommand } from "./_common";
 import {
   getWorkspaceRoot,
@@ -22,13 +20,7 @@ export function registerSyncIndexCommand(context: any) {
       const cfg = await readCodegenConfig(root);
       const baseDir = path.join(root, cfg.outputPath);
 
-      // Подготовим абсолютные маски для игнорирования:
-      // каждая запись из ignoreSync трактуется относительно корня рабочей папки
-      const ignorePatterns = (cfg.ignoreSync || []).map((pat) =>
-        path.isAbsolute(pat) ? pat : path.join(root, pat)
-      );
-
-      // Проверяем, что базовая директория существует
+      // Проверяем, что baseDir существует
       try {
         const stat = await fs.stat(baseDir);
         if (!stat.isDirectory()) {
@@ -40,37 +32,30 @@ export function registerSyncIndexCommand(context: any) {
         return;
       }
 
-      // Рекурсивно собираем все вложенные подпапки внутри baseDir,
-      // пропуская те, что попадают под ignorePatterns
+      // Собираем все подпапки (относительные пути)
       async function collectAllSubfolders(
         dir: string,
-        prefix: string = ""
+        prefix = ""
       ): Promise<string[]> {
-        let results: string[] = [];
+        let res: string[] = [];
         let entries: Dirent[];
         try {
           entries = (await fs.readdir(dir, {
             withFileTypes: true,
           })) as Dirent[];
         } catch {
-          return results;
+          return res;
         }
         for (const entry of entries) {
-          if (!entry.isDirectory()) continue;
-
-          const absPath = path.join(dir, entry.name);
-          // если абсолютный путь совпадает с любым паттерном — пропускаем
-          if (ignorePatterns.some((pat) => minimatch(absPath, pat))) {
-            continue;
+          if (entry.isDirectory()) {
+            const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+            res.push(rel);
+            res = res.concat(
+              await collectAllSubfolders(path.join(dir, entry.name), rel)
+            );
           }
-
-          const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-          results.push(relPath);
-
-          const deeper = await collectAllSubfolders(absPath, relPath);
-          results = results.concat(deeper);
         }
-        return results;
+        return res;
       }
 
       let allFolders: string[];
@@ -87,8 +72,19 @@ export function registerSyncIndexCommand(context: any) {
         return;
       }
 
-      // Формируем QuickPick-элементы
-      const items: vscode.QuickPickItem[] = allFolders
+      // преобразуем ignoreSync из codegen.json в абсолютные пути
+      const ignoreList: string[] = Array.isArray(cfg.ignoreSync)
+        ? cfg.ignoreSync
+        : [];
+      const absIgnorePatterns = ignoreList.map((p) => path.resolve(root, p));
+
+      // предварительный сервис для фильтрации выбора
+      const svcPreview = new SyncIndexService(baseDir, absIgnorePatterns);
+      const visibleFolders = allFolders.filter(
+        (rel) => !svcPreview.isIgnored(path.join(baseDir, rel))
+      );
+
+      const items: vscode.QuickPickItem[] = visibleFolders
         .map((rel) => {
           const depth = rel.split("/").length - 1;
           const indent = "  ".repeat(depth);
@@ -109,20 +105,19 @@ export function registerSyncIndexCommand(context: any) {
         return;
       }
 
-      // Собираем выбранные и их потомков
+      // Расширяем выбор: если выбран уровень выше – включаем и вложенные
       const chosenSet = new Set(picked.map((i) => i.description!));
       const toSyncRel = allFolders.filter((rel) =>
-        [...chosenSet].some((c) => rel === c || rel.startsWith(`${c}/`))
+        Array.from(chosenSet).some(
+          (sel) => rel === sel || rel.startsWith(`${sel}/`)
+        )
       );
-      const unique = Array.from(new Set(toSyncRel)).sort();
 
-      // Преобразуем в абсолютные пути
-      const selectedDirs = unique.map((rel) => path.join(baseDir, rel));
-
-      // Запускаем сервис синхронизации с учётом ignorePatterns
+      // абсолютные пути для финальной синхронизации
+      const toSyncAbs = toSyncRel.map((rel) => path.join(baseDir, rel));
+      const svc = new SyncIndexService(baseDir, absIgnorePatterns);
       try {
-        const svc = new SyncIndexService(ignorePatterns);
-        const ok = await svc.runOnFolders(selectedDirs);
+        const ok = await svc.runOnFolders(toSyncAbs);
         if (!ok) {
           showError("Не удалось синхронизировать index.ts в выбранных папках.");
         }
