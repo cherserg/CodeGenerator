@@ -1,12 +1,19 @@
+// Path: src/services/file-creator.service.ts
+
 import * as fs from "fs/promises";
 import * as path from "path";
 import prettier from "prettier";
+import {
+  getPathCommentLine,
+  stripOldPathComments,
+} from "../utils/pathCommentUtils";
 
 export class FileCreatorService {
   /**
    * Сохраняет `content` в `outDir/fileName`.
-   * Если передан `workspaceRoot`, то в начало файла добавляется строка
-   *   // Path: относительный/путь/к/файлу
+   * Если передан `workspaceRoot`, то
+   * — удаляет существующие “// Path:” в начале,
+   * — добавляет строку `// Path: относительный/путь/к/файлу`
    * ещё ДО форматирования и записи.
    *
    * При отличии содержимого создаётся резервная копия (.bak.YYYYMMDDTHHMMSS).
@@ -17,26 +24,29 @@ export class FileCreatorService {
     content: string,
     workspaceRoot?: string
   ): Promise<void> {
-    /* ───── 1. гарантируем существование каталога ───── */
+    // 1. гарантируем существование каталога
     await fs.mkdir(outDir, { recursive: true });
     const fullPath = path.join(outDir, fileName);
 
-    /* ───── 2. добавляем строку “// Path: …” при необходимости ───── */
+    // 2. подготавливаем тело с единственным комментарием Path
     let body = content;
     if (workspaceRoot) {
-      const rel = path.relative(workspaceRoot, fullPath).replace(/\\/g, "/");
-      body = `// Path: ${rel}\n\n${content}`;
+      // убираем старые Path-комментарии
+      body = stripOldPathComments(body);
+      // добавляем актуальный
+      const pathLine = getPathCommentLine(fullPath, workspaceRoot);
+      body = `${pathLine}\n\n${body}`;
     }
 
-    /* ───── 3. находим конфиг Prettier ───── */
+    // 3. находим конфиг Prettier
     let prettierCfg: prettier.Options | null = null;
     try {
       prettierCfg = await prettier.resolveConfig(fullPath);
     } catch {
-      /* игнорируем ошибки */
+      // игнорируем
     }
 
-    /* ───── 4. выбираем парсер по расширению ───── */
+    // 4. выбираем парсер по расширению
     const ext = path.extname(fileName).toLowerCase();
     const parser: prettier.BuiltInParserName =
       ext === ".ts" || ext === ".tsx"
@@ -51,7 +61,7 @@ export class FileCreatorService {
                 ? "markdown"
                 : "babel";
 
-    /* ───── 5. форматируем ───── */
+    // 5. форматируем
     let formatted: string;
     try {
       formatted = await prettier.format(body, {
@@ -63,13 +73,13 @@ export class FileCreatorService {
       formatted = body;
     }
 
-    /* ───── 6. бэкап при изменении ───── */
+    // 6. бэкап при изменении
     let needBackup = false;
     try {
       const old = await fs.readFile(fullPath, "utf-8");
       needBackup = old !== formatted;
     } catch (e: any) {
-      if (e.code !== "ENOENT") throw e; // другие ошибки пробрасываем
+      if (e.code !== "ENOENT") throw e;
     }
 
     if (needBackup) {
@@ -86,7 +96,7 @@ export class FileCreatorService {
       await fs.copyFile(fullPath, `${fullPath}.bak.${stamp}`);
     }
 
-    /* ───── 7. запись файла ───── */
+    // 7. финальная запись
     await fs.writeFile(fullPath, formatted, "utf-8");
   }
 }
