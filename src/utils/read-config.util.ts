@@ -1,3 +1,5 @@
+// src/utils/read-config.util.ts
+
 import * as fs from "fs/promises";
 import * as path from "path";
 import {
@@ -24,7 +26,9 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
     pathOrder: Array.isArray(cfgRaw.pathOrder)
       ? cfgRaw.pathOrder
       : DEFAULT_CONFIG.pathOrder,
-    /* --------- новое поле --------- */
+    nameOrder: Array.isArray(cfgRaw.nameOrder)
+      ? cfgRaw.nameOrder
+      : DEFAULT_CONFIG.nameOrder,
     ignoreSync: Array.isArray(cfgRaw.ignoreSync)
       ? cfgRaw.ignoreSync
       : DEFAULT_CONFIG.ignoreSync,

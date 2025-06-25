@@ -1,4 +1,5 @@
 // src/commands/restoreDocs.ts
+
 import * as fs from "fs/promises";
 import * as path from "path";
 import { registerCommand } from "./_common";
@@ -32,6 +33,7 @@ export function registerRestoreDocsCommand(context: any) {
         outputPath: globalOutputPath,
         outputExt,
         pathOrder: globalPathOrder,
+        nameOrder: globalNameOrder,
       } = await readCodegenConfig(root);
       const baseDir = path.join(root, configFolder);
 
@@ -96,6 +98,7 @@ export function registerRestoreDocsCommand(context: any) {
             : path.join(root, globalOutputPath),
           outputExt,
           pathOrder: tpl.pathOrder ?? globalPathOrder,
+          nameOrder: tpl.nameOrder ?? globalNameOrder,
         };
 
         for (const scr of scripts) {

@@ -1,4 +1,5 @@
 // src/commands/generateFromPreset.ts
+
 import * as path from "path";
 import { registerCommand } from "./_common";
 import { pickEntitiesWithPresets, pickPresetKeys } from "../utils/pick.utils";
@@ -34,6 +35,7 @@ export function registerGenerateFromPresetCommand(context: any) {
         outputPath: globalOutputPath,
         outputExt,
         pathOrder: globalPathOrder,
+        nameOrder: globalNameOrder,
       } = await readCodegenConfig(root);
       const baseDir = path.join(root, configFolder);
 
@@ -137,6 +139,7 @@ export function registerGenerateFromPresetCommand(context: any) {
                   : path.join(root, globalOutputPath),
                 outputExt,
                 pathOrder: tpl.pathOrder ?? globalPathOrder,
+                nameOrder: tpl.nameOrder ?? globalNameOrder,
               };
 
               const request: IGenerationRequest = {

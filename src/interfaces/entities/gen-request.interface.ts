@@ -10,6 +10,7 @@ export interface IOutput {
   outputPath: string;
   outputExt: TExtension;
   pathOrder?: Array<"entity" | "script">;
+  nameOrder?: Array<"entity" | "script" | "template">;
 }
 
 export interface IGenerationRequest {

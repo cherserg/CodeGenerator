@@ -1,4 +1,5 @@
 // src/commands/generateDocs.ts
+
 import * as fs from "fs/promises";
 import { registerCommand } from "./_common";
 import { TemplateRepository } from "../repositories/template.repository";
@@ -31,6 +32,7 @@ export function registerGenerateDocsCommand(context: any) {
         outputPath: globalOutputPath,
         outputExt,
         pathOrder: globalPathOrder,
+        nameOrder: globalNameOrder,
       } = await readCodegenConfig(root);
       const baseDir = `${root}/${configFolder}`;
 
@@ -96,6 +98,7 @@ export function registerGenerateDocsCommand(context: any) {
           outputPath: effectiveOutputPath,
           outputExt,
           pathOrder: tpl.pathOrder ?? globalPathOrder,
+          nameOrder: tpl.nameOrder ?? globalNameOrder,
         };
 
         for (const scr of scripts) {
