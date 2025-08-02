@@ -1,3 +1,5 @@
+// src/services/sync-index.service.ts
+
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
@@ -172,15 +174,25 @@ export class SyncIndexService {
       .filter((d) => d.isDirectory() && !this.isIgnored(path.join(dir, d.name)))
       .map((d) => d.name)
       .sort((a, b) => a.localeCompare(b));
+
     const tsFiles = dirents
       .filter(
         (d) =>
           d.isFile() &&
-          d.name.endsWith(".ts") &&
-          d.name.toLowerCase() !== "index.ts"
+          (d.name.endsWith(".ts") || d.name.endsWith(".tsx")) &&
+          d.name.toLowerCase() !== "index.ts" &&
+          d.name.toLowerCase() !== "index.tsx"
       )
-      .map((d) => d.name.slice(0, -3))
+      .map((d) => {
+        if (d.name.endsWith(".tsx")) {
+          return d.name.slice(0, -4);
+        } else {
+          // .ts
+          return d.name.slice(0, -3);
+        }
+      })
       .sort((a, b) => a.localeCompare(b));
+
     return { folders, tsFiles };
   }
 

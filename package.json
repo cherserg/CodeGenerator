@@ -1,8 +1,8 @@
 {
-  "name": "code-generator",
-  "displayName": "CodeGenerator",
+  "name": "code-generator-cherserg",
+  "displayName": "CodeGenerator by cherserg",
   "description": "Генерирует код и документацию на основе YAML-шаблонов",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "publisher": "cherserg",
   "engines": {
     "vscode": "^1.65.0"
