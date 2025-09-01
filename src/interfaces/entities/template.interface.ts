@@ -1,7 +1,5 @@
 // src/interfaces/entities/template.interface.ts
 
-import { TExtension } from "./gen-request.interface";
-
 export interface TemplatePart {
   key: string;
   content: string;
@@ -23,7 +21,7 @@ export interface ITemplate {
   /** Список сущностей, к которым шаблон неприменим */
   nonApplicableEntities?: string[];
   /** Расширение выходного файла (например, ".ts") */
-  outputExt: TExtension;
+  outputExt: string;
   /** Путь вывода для этого шаблона (относительно workspace root) */
   outputPath?: string;
   /** Порядок сегментов пути (существующая опция) */

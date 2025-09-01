@@ -1,3 +1,5 @@
+// src/commands/syncIndex.ts
+
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
@@ -18,9 +20,8 @@ export function registerSyncIndexCommand(context: any) {
     async () => {
       const root = getWorkspaceRoot();
       const cfg = await readCodegenConfig(root);
-      const baseDir = path.join(root, cfg.outputPath);
+      const baseDir = path.join(root, cfg.outputPath); // Проверяем, что baseDir существует
 
-      // Проверяем, что baseDir существует
       try {
         const stat = await fs.stat(baseDir);
         if (!stat.isDirectory()) {
@@ -30,9 +31,8 @@ export function registerSyncIndexCommand(context: any) {
       } catch (e: any) {
         showError(`Папка "${baseDir}" не найдена: ${e.message}`);
         return;
-      }
+      } // Собираем все подпапки (относительные пути)
 
-      // Собираем все подпапки (относительные пути)
       async function collectAllSubfolders(
         dir: string,
         prefix = ""
@@ -70,16 +70,18 @@ export function registerSyncIndexCommand(context: any) {
       } catch (err: any) {
         showError(`Не удалось собрать список подпапок: ${err.message}`);
         return;
-      }
+      } // преобразуем ignoreSync из codegen.json в абсолютные пути
 
-      // преобразуем ignoreSync из codegen.json в абсолютные пути
       const ignoreList: string[] = Array.isArray(cfg.ignoreSync)
         ? cfg.ignoreSync
         : [];
-      const absIgnorePatterns = ignoreList.map((p) => path.resolve(root, p));
+      const absIgnorePatterns = ignoreList.map((p) => path.resolve(root, p)); // предварительный сервис для фильтрации выбора
 
-      // предварительный сервис для фильтрации выбора
-      const svcPreview = new SyncIndexService(baseDir, absIgnorePatterns);
+      const svcPreview = new SyncIndexService(
+        baseDir,
+        cfg.syncIndexExt,
+        absIgnorePatterns
+      );
       const visibleFolders = allFolders.filter(
         (rel) => !svcPreview.isIgnored(path.join(baseDir, rel))
       );
@@ -87,7 +89,7 @@ export function registerSyncIndexCommand(context: any) {
       const items: vscode.QuickPickItem[] = visibleFolders
         .map((rel) => {
           const depth = rel.split("/").length - 1;
-          const indent = "  ".repeat(depth);
+          const indent = "  ".repeat(depth);
           return {
             label: `${indent}└ ${path.basename(rel)}`,
             description: rel,
@@ -97,29 +99,33 @@ export function registerSyncIndexCommand(context: any) {
 
       const picked = await vscode.window.showQuickPick(items, {
         canPickMany: true,
-        placeHolder: "Выберите подпапки для синхронизации index.ts",
+        placeHolder: "Выберите подпапки для синхронизации index-файлов",
       });
 
       if (!picked || picked.length === 0) {
         showWarning("Ни одна папка не была выбрана.");
         return;
-      }
+      } // Расширяем выбор: если выбран уровень выше – включаем и вложенные
 
-      // Расширяем выбор: если выбран уровень выше – включаем и вложенные
       const chosenSet = new Set(picked.map((i) => i.description!));
       const toSyncRel = allFolders.filter((rel) =>
         Array.from(chosenSet).some(
           (sel) => rel === sel || rel.startsWith(`${sel}/`)
         )
-      );
+      ); // абсолютные пути для финальной синхронизации
 
-      // абсолютные пути для финальной синхронизации
       const toSyncAbs = toSyncRel.map((rel) => path.join(baseDir, rel));
-      const svc = new SyncIndexService(baseDir, absIgnorePatterns);
+      const svc = new SyncIndexService(
+        baseDir,
+        cfg.syncIndexExt,
+        absIgnorePatterns
+      );
       try {
         const ok = await svc.runOnFolders(toSyncAbs);
         if (!ok) {
-          showError("Не удалось синхронизировать index.ts в выбранных папках.");
+          showError(
+            "Не удалось синхронизировать index-файлы в выбранных папках."
+          );
         }
       } catch (err: any) {
         showError(`Ошибка синхронизации: ${err.message}`);

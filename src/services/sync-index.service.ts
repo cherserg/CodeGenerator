@@ -7,7 +7,7 @@ import prettier from "prettier";
 import { showWarning, showInfo } from "../utils/vscode.utils";
 
 /**
- * Сервис синхронизации index.ts во всех подпапках baseDir.
+ * Сервис синхронизации index-файлов во всех подпапках baseDir.
  * Учитывает исключения из codegen.json → ignoreSync.
  */
 export class SyncIndexService {
@@ -18,10 +18,12 @@ export class SyncIndexService {
 
   /**
    * @param baseDir        Абсолютный путь к корню сгенерированных файлов
+   * @param syncExt        Расширение для index-файлов (например, ".ts")
    * @param ignorePatterns Массив путей или glob-масок из codegen.json
    */
   constructor(
     private baseDir: string,
+    private syncExt: string = ".ts",
     ignorePatterns: string[] = []
   ) {
     // Нормализуем baseDir
@@ -37,56 +39,43 @@ export class SyncIndexService {
       .map((p) => p.replace(/\\/g, "/").replace(/^\/+|\/+$/g, ""));
   }
 
-  /* ────────────── ПУБЛИЧНЫЕ МЕТОДЫ ────────────── */
-
-  /** Полная синхронизация всего дерева baseDir. */
   public async run(): Promise<boolean> {
     const all = await this.collectAllSubfolders(this.baseDir);
     return this.syncFolders(all);
   }
 
-  /**
-   * Синхронизация только указанных директорий (абсолютные пути).
-   */
   public async runOnFolders(folders: string[]): Promise<boolean> {
     const filtered = folders.filter((abs) => !this.isIgnored(abs));
     return this.syncFolders(filtered);
   }
 
-  /** Проверка, подпадает ли путь под ignoreSync. */
   public isIgnored(absPath: string): boolean {
     const absNorm = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
 
-    // 1) Абсолютные исключения
     for (const ig of this.absIgnores) {
       if (absNorm === ig || absNorm.startsWith(ig + "/")) {
         return true;
       }
     }
 
-    // 2) Относительный путь внутри baseDir
     const rel = path
       .relative(this.baseDir, absNorm)
       .replace(/\\/g, "/")
       .replace(/\/+$/, "");
 
     if (!rel) {
-      // это сам baseDir
       return false;
     }
 
-    // 3) Glob-маски по относительному пути
     for (const mask of this.masks) {
       const body = this.globBody(mask);
-      if (new RegExp(`^${body}$`).test(rel)) return true; // точное
-      if (new RegExp(`${body}$`).test(absNorm)) return true; // суффикс
-      if (new RegExp(`(^|/)${body}(/|$)`).test(absNorm)) return true; // внутри
+      if (new RegExp(`^${body}$`).test(rel)) return true;
+      if (new RegExp(`${body}$`).test(absNorm)) return true;
+      if (new RegExp(`(^|/)${body}(/|$)`).test(absNorm)) return true;
     }
 
     return false;
   }
-
-  /* ────────────── ВНУТРЕННЯЯ ЛОГИКА ────────────── */
 
   private async collectAllSubfolders(dir: string): Promise<string[]> {
     const result: string[] = [];
@@ -122,9 +111,10 @@ export class SyncIndexService {
       if (this.isIgnored(dir)) continue;
 
       try {
-        const { folders: sub, tsFiles } = await this.collectModules(dir);
-        const raw = this.generateContent(sub, tsFiles);
-        const idx = path.join(dir, "index.ts");
+        const { folders: sub, files } = await this.collectModules(dir);
+        const raw = this.generateContent(sub, files);
+        const indexFileName = `index${this.syncExt}`;
+        const idx = path.join(dir, indexFileName);
         const fmt = await this.formatWithPrettier(idx, raw);
 
         let existing: string | null = null;
@@ -150,13 +140,11 @@ export class SyncIndexService {
 
     showInfo(
       anyChanged
-        ? "Синхронизация index.ts завершена."
-        : "index.ts уже актуальны. Изменений не обнаружено."
+        ? "Синхронизация index-файлов завершена."
+        : "index-файлы уже актуальны. Изменений не обнаружено."
     );
     return true;
   }
-
-  /* ────────────── УТИЛИТЫ ────────────── */
 
   private globBody(mask: string): string {
     return mask
@@ -166,45 +154,57 @@ export class SyncIndexService {
       .replace(/§§DOUBLE§§/g, ".*");
   }
 
+  /**
+   * ИЗМЕНЕНО: Теперь ищет файлы с расширением this.syncExt, а не только .ts/.tsx
+   */
   private async collectModules(
     dir: string
-  ): Promise<{ folders: string[]; tsFiles: string[] }> {
+  ): Promise<{ folders: string[]; files: string[] }> {
     const dirents = await fs.readdir(dir, { withFileTypes: true });
     const folders = dirents
       .filter((d) => d.isDirectory() && !this.isIgnored(path.join(dir, d.name)))
       .map((d) => d.name)
       .sort((a, b) => a.localeCompare(b));
 
-    const tsFiles = dirents
-      .filter(
-        (d) =>
-          d.isFile() &&
-          (d.name.endsWith(".ts") || d.name.endsWith(".tsx")) &&
-          d.name.toLowerCase() !== "index.ts" &&
-          d.name.toLowerCase() !== "index.tsx"
-      )
-      .map((d) => {
-        if (d.name.endsWith(".tsx")) {
-          return d.name.slice(0, -4);
-        } else {
-          // .ts
-          return d.name.slice(0, -3);
-        }
+    const indexFileNameWithExt = `index${this.syncExt}`;
+
+    const files = dirents
+      .filter((d) => {
+        const lowerName = d.name.toLowerCase();
+        if (!d.isFile()) return false;
+
+        // Ищем файлы с нужным расширением
+        const isExportable = lowerName.endsWith(this.syncExt.toLowerCase());
+        // Игнорируем сам index-файл
+        const isIndexFile = lowerName === indexFileNameWithExt.toLowerCase();
+
+        return isExportable && !isIndexFile;
       })
+      .map((d) => d.name.slice(0, -this.syncExt.length)) // Обрезаем расширение
       .sort((a, b) => a.localeCompare(b));
 
-    return { folders, tsFiles };
+    return { folders, files };
   }
 
-  private generateContent(folders: string[], tsFiles: string[]): string {
-    if (folders.length === 0 && tsFiles.length === 0) {
-      return `export * from '.';\n`;
+  /**
+   * ИЗМЕНЕНО: Генерирует разный синтаксис экспорта для Dart и для TS/JS.
+   */
+  private generateContent(folders: string[], files: string[]): string {
+    if (folders.length === 0 && files.length === 0) {
+      return ``; // Возвращаем пустую строку для Dart, а не 'export * from "."'.
     }
-    return [
-      ...folders.map((f) => `export * from './${f}';`),
-      ...tsFiles.map((f) => `export * from './${f}';`),
-      "",
-    ].join("\n");
+
+    // Для Dart используется другой синтаксис
+    if (this.syncExt === ".dart") {
+      const folderExports = folders.map((f) => `export '${f}/index.dart';`);
+      const fileExports = files.map((f) => `export '${f}${this.syncExt}';`);
+      return [...folderExports, ...fileExports, ""].join("\n");
+    }
+
+    // Стандартное поведение для TS/JS
+    const folderExports = folders.map((f) => `export * from './${f}';`);
+    const fileExports = files.map((f) => `export * from './${f}';`);
+    return [...folderExports, ...fileExports, ""].join("\n");
   }
 
   private stripHeader(content: string): string {
@@ -241,13 +241,41 @@ export class SyncIndexService {
     try {
       cfg = await prettier.resolveConfig(filePath);
     } catch {}
+
+    const extension = path.extname(filePath).toLowerCase();
+
+    // ИЗМЕНЕНО: Неправильный тип prettier.ParserName заменен на string
+    let parser: string | undefined;
+
+    switch (extension) {
+      case ".ts":
+      case ".tsx":
+        parser = "typescript";
+        break;
+      case ".js":
+      case ".jsx":
+        parser = "babel";
+        break;
+      case ".json":
+        parser = "json";
+        break;
+      case ".dart":
+        parser = "dart"; // Требует плагина @prettier/plugin-dart
+        break;
+      default:
+        // Для неизвестных расширений форматирование не применяется
+        return content;
+    }
+
     try {
       return await prettier.format(content, {
         ...(cfg || {}),
-        parser: "typescript",
+        parser,
         filepath: filePath,
       });
-    } catch {
+    } catch (e) {
+      // Если форматирование не удалось (например, нет плагина),
+      // просто возвращаем исходный контент.
       return content;
     }
   }

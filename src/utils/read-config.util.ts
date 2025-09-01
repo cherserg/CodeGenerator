@@ -10,11 +10,24 @@ import {
 export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
   const cfgPath = path.join(root, "codegen.json");
   let cfgRaw: Partial<ICodegenConfig> = {};
+
   try {
     const raw = await fs.readFile(cfgPath, "utf8");
     cfgRaw = JSON.parse(raw);
-  } catch {
-    /* нет файла или он не валиден – используем дефолт */
+    // Явный лог успеха
+    console.log(
+      `✅ Config loaded successfully from ${cfgPath}. Found syncIndexExt:`,
+      cfgRaw.syncIndexExt
+    );
+  } catch (error: any) {
+    // Явный лог ошибки
+    console.error(
+      `❌ Failed to read or parse codegen.json. Falling back to default config.`,
+      {
+        path: cfgPath,
+        error: error.message,
+      }
+    );
   }
 
   return {
@@ -32,5 +45,6 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
     ignoreSync: Array.isArray(cfgRaw.ignoreSync)
       ? cfgRaw.ignoreSync
       : DEFAULT_CONFIG.ignoreSync,
+    syncIndexExt: cfgRaw.syncIndexExt?.trim() || DEFAULT_CONFIG.syncIndexExt,
   };
 }

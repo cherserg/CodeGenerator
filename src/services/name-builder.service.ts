@@ -28,6 +28,8 @@ export class NameBuilderService {
       .map((key) => partsMap[key])
       .filter((part): part is string => Boolean(part));
 
+    // ИЗМЕНЕНО: Убрана привязка к типу TExtension. Теперь используется любое расширение.
+    // Это позволяет другим командам генерации также работать с любыми файлами.
     const ext = template.outputExt || output.outputExt;
     return parts.join(".") + ext;
   }

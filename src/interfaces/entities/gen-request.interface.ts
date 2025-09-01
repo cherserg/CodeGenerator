@@ -4,11 +4,13 @@ import { IScript } from "./script.interface";
 import { ITemplate } from "./template.interface";
 import { IEntity } from "./entity.interface";
 
-export type TExtension = ".ts" | ".json";
+// ИЗМЕНЕНО: Этот тип больше не используется, так как он ограничивал расширения.
+// export type TExtension = ".ts" | ".json";
 
 export interface IOutput {
   outputPath: string;
-  outputExt: TExtension;
+  // ИЗМЕНЕНО: Тип изменен на string, чтобы разрешить любые расширения.
+  outputExt: string;
   pathOrder?: Array<"entity" | "script">;
   nameOrder?: Array<"entity" | "script" | "template">;
 }
