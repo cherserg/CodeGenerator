@@ -12,11 +12,13 @@ export interface ICodegenConfig {
   > /** Каталоги, которые нужно пропускать при синхронизации index.ts */;
   ignoreSync?: string[] /** Расширение для barrel-файлов (например, ".ts" или ".tsx"). */;
   syncIndexExt?: string;
+  syncIndexPath?: string;
 }
 
 export const DEFAULT_CONFIG: ICodegenConfig = {
   configFolder: "codegen",
   outputPath: "src/generated",
+  syncIndexPath: "src/generated",
   outputExt: ".ts",
   pathOrder: ["entity", "script"],
   nameOrder: ["entity", "script", "template"], // <--- здесь

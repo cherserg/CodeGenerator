@@ -19,8 +19,8 @@ export function registerSyncIndexCommand(context: any) {
     "codegenerator.syncIndex",
     async () => {
       const root = getWorkspaceRoot();
-      const cfg = await readCodegenConfig(root);
-      const baseDir = path.join(root, cfg.outputPath); // Проверяем, что baseDir существует
+      const cfg = await readCodegenConfig(root); // ✅ ИЗМЕНЕНИЕ: Используем syncIndexPath вместо outputPath
+      const baseDir = path.join(root, cfg.syncIndexPath!);
 
       try {
         const stat = await fs.stat(baseDir);
@@ -31,7 +31,7 @@ export function registerSyncIndexCommand(context: any) {
       } catch (e: any) {
         showError(`Папка "${baseDir}" не найдена: ${e.message}`);
         return;
-      } // Собираем все подпапки (относительные пути)
+      }
 
       async function collectAllSubfolders(
         dir: string,
@@ -70,12 +70,12 @@ export function registerSyncIndexCommand(context: any) {
       } catch (err: any) {
         showError(`Не удалось собрать список подпапок: ${err.message}`);
         return;
-      } // преобразуем ignoreSync из codegen.json в абсолютные пути
+      }
 
       const ignoreList: string[] = Array.isArray(cfg.ignoreSync)
         ? cfg.ignoreSync
         : [];
-      const absIgnorePatterns = ignoreList.map((p) => path.resolve(root, p)); // предварительный сервис для фильтрации выбора
+      const absIgnorePatterns = ignoreList.map((p) => path.resolve(root, p));
 
       const svcPreview = new SyncIndexService(
         baseDir,
@@ -105,14 +105,14 @@ export function registerSyncIndexCommand(context: any) {
       if (!picked || picked.length === 0) {
         showWarning("Ни одна папка не была выбрана.");
         return;
-      } // Расширяем выбор: если выбран уровень выше – включаем и вложенные
+      }
 
       const chosenSet = new Set(picked.map((i) => i.description!));
       const toSyncRel = allFolders.filter((rel) =>
         Array.from(chosenSet).some(
           (sel) => rel === sel || rel.startsWith(`${sel}/`)
         )
-      ); // абсолютные пути для финальной синхронизации
+      );
 
       const toSyncAbs = toSyncRel.map((rel) => path.join(baseDir, rel));
       const svc = new SyncIndexService(

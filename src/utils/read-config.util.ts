@@ -14,13 +14,11 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
   try {
     const raw = await fs.readFile(cfgPath, "utf8");
     cfgRaw = JSON.parse(raw);
-    // Явный лог успеха
     console.log(
       `✅ Config loaded successfully from ${cfgPath}. Found syncIndexExt:`,
       cfgRaw.syncIndexExt
     );
   } catch (error: any) {
-    // Явный лог ошибки
     console.error(
       `❌ Failed to read or parse codegen.json. Falling back to default config.`,
       {
@@ -28,11 +26,14 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
         error: error.message,
       }
     );
-  }
+  } // Сначала определяем outputPath, так как он может быть fallback'ом
+
+  const outputPath = cfgRaw.outputPath?.trim() || DEFAULT_CONFIG.outputPath;
 
   return {
     configFolder: cfgRaw.configFolder?.trim() || DEFAULT_CONFIG.configFolder,
-    outputPath: cfgRaw.outputPath?.trim() || DEFAULT_CONFIG.outputPath,
+    outputPath: outputPath, // ✅ ИЗМЕНЕНИЕ: Добавляем чтение нового поля с fallback'ом на outputPath
+    syncIndexPath: cfgRaw.syncIndexPath?.trim() || outputPath,
     outputExt:
       (cfgRaw.outputExt as ICodegenConfig["outputExt"]) ||
       DEFAULT_CONFIG.outputExt,
