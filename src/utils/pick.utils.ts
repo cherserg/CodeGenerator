@@ -1,9 +1,9 @@
 // src/utils/pick.utils.ts
+
 import { QuickPickService } from "./quick-pick.service";
 import { IEntity } from "../interfaces/entities/entity.interface";
 import { IScript } from "../interfaces/entities/script.interface";
 import { ITemplate } from "../interfaces/entities/template.interface";
-import { NO_ENTITY_LABEL } from "../interfaces";
 import { isTemplateApplicable } from "./template-applicability.util";
 
 /* ---------- универсальный выбор строк ---------- */
@@ -26,19 +26,14 @@ export async function pickScripts(
   return pickedNames.map((name) => scripts.find((s) => s.name === name)!);
 }
 
-/* ---------- выбор сущностей (с опцией «Без сущности») ---------- */
+/* ---------- выбор сущностей (без опции «Без сущности») ---------- */
 export async function pickEntities(
   entities: IEntity[],
   placeHolder: string
-): Promise<(IEntity | undefined)[]> {
-  const list = [NO_ENTITY_LABEL, ...entities.map((e) => e.name)];
-  const picked = await pickStrings(list, placeHolder);
-
-  return picked.map((name) =>
-    name === NO_ENTITY_LABEL
-      ? undefined
-      : entities.find((e) => e.name === name)!
-  );
+): Promise<IEntity[]> {
+  const list = entities.map((e) => e.name);
+  const pickedNames = await pickStrings(list, placeHolder);
+  return pickedNames.map((name) => entities.find((e) => e.name === name)!);
 }
 
 /* ---------- выбор сущностей ТОЛЬКО из переданного списка (без «Без сущности») ---------- */
@@ -57,7 +52,7 @@ export async function pickEntitiesWithPresets(
 export async function pickTemplates(
   templates: ITemplate[],
   scripts: IScript[],
-  entities: (IEntity | undefined)[],
+  entities: IEntity[],
   placeHolder: string
 ): Promise<ITemplate[]> {
   const filtered = templates.filter((tpl) =>

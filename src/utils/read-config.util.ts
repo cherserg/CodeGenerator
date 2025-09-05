@@ -47,5 +47,6 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
       ? cfgRaw.ignoreSync
       : DEFAULT_CONFIG.ignoreSync,
     syncIndexExt: cfgRaw.syncIndexExt?.trim() || DEFAULT_CONFIG.syncIndexExt,
+    barrelName: cfgRaw.barrelName?.trim() || DEFAULT_CONFIG.barrelName,
   };
 }

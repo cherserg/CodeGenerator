@@ -1,4 +1,5 @@
 // src/utils/template-applicability.util.ts
+
 import { ITemplate } from "../interfaces/entities/template.interface";
 import { IScript } from "../interfaces/entities/script.interface";
 import { IEntity } from "../interfaces/entities/entity.interface";
@@ -8,17 +9,14 @@ import { IEntity } from "../interfaces/entities/entity.interface";
  *
  * Правила для каждой размерности (скрипт / сущность):
  * 1. Нет `applicable*` и `nonApplicable*` → true
- * 2. Есть только `applicable*`            → объект обязан присутствовать в `applicable*`
- * 3. Есть только `nonApplicable*`         → объект **не** должен присутствовать в `nonApplicable*`
- * 4. Заданы оба                           → учитываем **только** `applicable*`
- *
- * Важно: если у шаблона указан `applicableEntities`, но entity == undefined
- * (т.е. «Без сущности»), то шаблон НЕ считается применимым.
+ * 2. Есть только `applicable*`            → объект обязан присутствовать в `applicable*`
+ * 3. Есть только `nonApplicable*`         → объект **не** должен присутствовать в `nonApplicable*`
+ * 4. Заданы оба                           → учитываем **только** `applicable*`
  */
 export function isTemplateApplicable(
   template: ITemplate,
   script: IScript,
-  entity?: IEntity
+  entity: IEntity
 ): boolean {
   /* ---------- проверка скрипта ---------- */
   const hasApplScripts =
@@ -33,9 +31,8 @@ export function isTemplateApplicable(
     scriptOk = template.applicableScripts!.includes(script.name);
   } else if (hasNonApplScripts) {
     scriptOk = !template.nonApplicableScripts!.includes(script.name);
-  }
+  } /* ---------- проверка сущности ---------- */
 
-  /* ---------- проверка сущности ---------- */
   const hasApplEntities =
     Array.isArray(template.applicableEntities) &&
     template.applicableEntities.length > 0;
@@ -45,17 +42,10 @@ export function isTemplateApplicable(
 
   let entityOk = true;
 
-  if (entity) {
-    if (hasApplEntities) {
-      entityOk = template.applicableEntities!.includes(entity.name);
-    } else if (hasNonApplEntities) {
-      entityOk = !template.nonApplicableEntities!.includes(entity.name);
-    }
-  } else {
-    // entity == undefined («Без сущности»)
-    // Если у шаблона задан applicableEntities, то без сущности он не применим
-    if (hasApplEntities) entityOk = false;
-    // nonApplicableEntities для undefined сущности не проверяем — это нормально
+  if (hasApplEntities) {
+    entityOk = template.applicableEntities!.includes(entity.name);
+  } else if (hasNonApplEntities) {
+    entityOk = !template.nonApplicableEntities!.includes(entity.name);
   }
 
   return scriptOk && entityOk;

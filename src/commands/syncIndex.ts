@@ -19,7 +19,7 @@ export function registerSyncIndexCommand(context: any) {
     "codegenerator.syncIndex",
     async () => {
       const root = getWorkspaceRoot();
-      const cfg = await readCodegenConfig(root); // ✅ ИЗМЕНЕНИЕ: Используем syncIndexPath вместо outputPath
+      const cfg = await readCodegenConfig(root);
       const baseDir = path.join(root, cfg.syncIndexPath!);
 
       try {
@@ -80,7 +80,8 @@ export function registerSyncIndexCommand(context: any) {
       const svcPreview = new SyncIndexService(
         baseDir,
         cfg.syncIndexExt,
-        absIgnorePatterns
+        absIgnorePatterns,
+        cfg.barrelName
       );
       const visibleFolders = allFolders.filter(
         (rel) => !svcPreview.isIgnored(path.join(baseDir, rel))
@@ -118,7 +119,8 @@ export function registerSyncIndexCommand(context: any) {
       const svc = new SyncIndexService(
         baseDir,
         cfg.syncIndexExt,
-        absIgnorePatterns
+        absIgnorePatterns,
+        cfg.barrelName
       );
       try {
         const ok = await svc.runOnFolders(toSyncAbs);

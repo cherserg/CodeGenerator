@@ -16,7 +16,8 @@ export class SyncIndexService {
   constructor(
     private baseDir: string,
     private syncExt: string = ".ts",
-    ignorePatterns: string[] = []
+    ignorePatterns: string[] = [],
+    private barrelName: string = "index"
   ) {
     // Выбираем подходящий набор правил или используем TS-правила по умолчанию
     this.rules = rules.ruleRegistry[syncExt.toLowerCase()] || rules.tsRules;
@@ -49,25 +50,11 @@ export class SyncIndexService {
       if (this.isIgnored(dir)) continue;
 
       try {
-        const { folders: sub, files } = await this.collectModules(dir);
-        // Делегируем генерацию контента правилам
+        const { folders: sub, files } = await this.collectModules(dir); // Делегируем генерацию контента правилам
         const raw = this.rules.generateContent(sub, files, this.syncExt);
 
-        const indexFileName = `index${this.syncExt}`;
+        const indexFileName = `${this.barrelName}${this.syncExt}`;
         const idx = path.join(dir, indexFileName);
-
-        // Не создаем пустые файлы
-        if (!raw.trim()) {
-          // Если файл существует, но должен быть пустым, удаляем его
-          try {
-            await fs.unlink(idx);
-            anyChanged = true;
-          } catch (e) {
-            /* Файла и так не было, все ок */
-          }
-          continue;
-        }
-
         const fmt = await this.formatWithPrettier(idx, raw);
 
         let existing: string | null = null;
@@ -105,17 +92,12 @@ export class SyncIndexService {
     const folders = dirents
       .filter((d) => d.isDirectory() && !this.isIgnored(path.join(dir, d.name)))
       .map((d) => d.name)
-      .sort((a, b) => a.localeCompare(b));
+      .sort((a, b) => a.localeCompare(b)); // Делегируем сбор файлов правилам
 
-    const indexFileName = `index${this.syncExt}`;
-
-    // Делегируем сбор файлов правилам
-    const files = this.rules.collectFiles(dirents, indexFileName);
+    const files = this.rules.collectFiles(dirents, this.barrelName);
 
     return { folders, files };
-  }
-
-  // --- Вспомогательные методы без изменений ---
+  } // --- Вспомогательные методы без изменений ---
 
   public isIgnored(absPath: string): boolean {
     const absNorm = absPath.replace(/\\/g, "/").replace(/\/+$/, "");

@@ -4,8 +4,8 @@ import { Dirent } from "fs";
 import { ISyncRule } from "./rule.interface";
 
 class DartRules implements ISyncRule {
-  collectFiles(dirents: Dirent[], indexFileName: string): string[] {
-    const indexFileLower = indexFileName.toLowerCase();
+  collectFiles(dirents: Dirent[], barrelName: string): string[] {
+    const indexFileLower = `${barrelName}.dart`.toLowerCase();
 
     return dirents
       .filter((d) => {
@@ -25,9 +25,9 @@ class DartRules implements ISyncRule {
 
   generateContent(folders: string[], files: string[], syncExt: string): string {
     if (folders.length === 0 && files.length === 0) {
-      return ``;
-    }
-    // Для Dart предполагаем, что вложенные папки также содержат index.dart
+      // Для Dart нет аналога "export * from './'", поэтому создаем пустой файл с комментарием.
+      return `// Barrel file, no exports yet.\n`;
+    } // Для Dart предполагаем, что вложенные папки также содержат index.dart
     const folderExports = folders.map((f) => `export '${f}/index.dart';`);
     const fileExports = files.map((f) => `export '${f}${syncExt}';`);
     return [...folderExports, ...fileExports, ""].join("\n");

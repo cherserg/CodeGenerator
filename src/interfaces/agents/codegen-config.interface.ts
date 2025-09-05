@@ -12,7 +12,8 @@ export interface ICodegenConfig {
   > /** Каталоги, которые нужно пропускать при синхронизации index.ts */;
   ignoreSync?: string[] /** Расширение для barrel-файлов (например, ".ts" или ".tsx"). */;
   syncIndexExt?: string;
-  syncIndexPath?: string;
+  syncIndexPath?: string /** Имя для barrel-файла (без расширения). По умолчанию "index". */;
+  barrelName?: string;
 }
 
 export const DEFAULT_CONFIG: ICodegenConfig = {
@@ -24,6 +25,5 @@ export const DEFAULT_CONFIG: ICodegenConfig = {
   nameOrder: ["entity", "script", "template"], // <--- здесь
   ignoreSync: [],
   syncIndexExt: ".ts",
+  barrelName: "index",
 };
-
-export const NO_ENTITY_LABEL = "__NO_ENTITY__";

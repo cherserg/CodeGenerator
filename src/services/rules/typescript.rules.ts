@@ -4,10 +4,9 @@ import { Dirent } from "fs";
 import { ISyncRule } from "./rule.interface";
 
 class TypeScriptRules implements ISyncRule {
-  collectFiles(dirents: Dirent[], indexFileName: string): string[] {
-    // Для TS всегда игнорируем оба варианта, чтобы избежать проблем при смене расширения
-    const indexTs = "index.ts";
-    const indexTsx = "index.tsx";
+  collectFiles(dirents: Dirent[], barrelName: string): string[] {
+    const indexTs = `${barrelName}.ts`.toLowerCase();
+    const indexTsx = `${barrelName}.tsx`.toLowerCase();
 
     return dirents
       .filter((d) => {
@@ -30,8 +29,8 @@ class TypeScriptRules implements ISyncRule {
 
   generateContent(folders: string[], files: string[], syncExt: string): string {
     if (folders.length === 0 && files.length === 0) {
-      // Для TS/JS можно оставить 'export * from "."', но это не обязательно.
-      return "";
+      // Для пустых папок генерируем экспорт всего из текущей директории
+      return `export * from './';\n`;
     }
     const folderExports = folders.map((f) => `export * from './${f}';`);
     const fileExports = files.map((f) => `export * from './${f}';`);
