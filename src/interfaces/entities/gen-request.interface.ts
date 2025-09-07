@@ -7,17 +7,17 @@ import { IEntity } from "./entity.interface";
 // ИЗМЕНЕНО: Этот тип больше не используется, так как он ограничивал расширения.
 // export type TExtension = ".ts" | ".json";
 
-export interface IOutput {
+export type IOutput = {
   outputPath: string;
   // ИЗМЕНЕНО: Тип изменен на string, чтобы разрешить любые расширения.
   outputExt: string;
   pathOrder?: Array<"entity" | "script">;
   nameOrder?: Array<"entity" | "script" | "template">;
-}
+};
 
-export interface IGenerationRequest {
+export type IGenerationRequest = {
   template: ITemplate;
   entity?: IEntity;
   script: IScript;
   output: IOutput;
-}
+};

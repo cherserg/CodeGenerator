@@ -1,5 +1,4 @@
-// src/commands/syncIndex.ts
-
+// src/commands/sync-barrel-files.command.ts
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
@@ -9,18 +8,47 @@ import {
   getWorkspaceRoot,
   showError,
   showWarning,
-} from "../utils/vscode.utils";
-import { readCodegenConfig } from "../utils/read-config.util";
+} from "../functions/vscode.functions";
+import { readCodegenConfig } from "../functions/read-config.functions";
 import { SyncIndexService } from "../services/sync-index.service";
+import { findProjectsInWorkspace } from "../functions/project-discovery.functions"; // <-- Добавлено
+import { pickProject } from "../functions/pick.functions"; // <-- Добавлено
 
-export function registerSyncIndexCommand(context: any) {
+export function registerSyncBarrelFilesCommand(context: any) {
   registerCommand(
     context,
     "codegenerator.syncIndex",
     async () => {
-      const root = getWorkspaceRoot();
-      const cfg = await readCodegenConfig(root);
-      const baseDir = path.join(root, cfg.syncIndexPath!);
+      const workspaceRoot = getWorkspaceRoot();
+
+      // ШАГ 1 и 2: Находим и выбираем проект
+      const projects = await findProjectsInWorkspace(workspaceRoot);
+      if (projects.length === 0) {
+        showWarning("Не найдено ни одного проекта с файлом codegen.json.");
+        return;
+      }
+
+      const selectedProject = await pickProject(
+        projects,
+        "Выберите проект для синхронизации index-файлов"
+      );
+
+      if (!selectedProject) {
+        showWarning("Проект не выбран.");
+        return;
+      }
+
+      const projectRoot = selectedProject.path;
+
+      // Используем projectRoot для всех последующих операций
+      const cfg = await readCodegenConfig(projectRoot);
+
+      // Проверяем наличие syncIndexPath
+      if (!cfg.syncIndexPath) {
+        showError('Параметр "syncIndexPath" не указан в codegen.json.');
+        return;
+      }
+      const baseDir = path.join(projectRoot, cfg.syncIndexPath);
 
       try {
         const stat = await fs.stat(baseDir);
@@ -75,7 +103,9 @@ export function registerSyncIndexCommand(context: any) {
       const ignoreList: string[] = Array.isArray(cfg.ignoreSync)
         ? cfg.ignoreSync
         : [];
-      const absIgnorePatterns = ignoreList.map((p) => path.resolve(root, p));
+      const absIgnorePatterns = ignoreList.map((p) =>
+        path.resolve(projectRoot, p)
+      );
 
       const svcPreview = new SyncIndexService(
         baseDir,
@@ -90,7 +120,7 @@ export function registerSyncIndexCommand(context: any) {
       const items: vscode.QuickPickItem[] = visibleFolders
         .map((rel) => {
           const depth = rel.split("/").length - 1;
-          const indent = "  ".repeat(depth);
+          const indent = "  ".repeat(depth);
           return {
             label: `${indent}└ ${path.basename(rel)}`,
             description: rel,

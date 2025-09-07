@@ -1,7 +1,7 @@
-// src/interfaces/script.interface.ts
+// src/interfaces/entities/script.interface.ts
 import { TVariableKey } from "./variable.interface";
 
-export interface IScript {
+export type IScript = {
   name: string;
   variables: Record<TVariableKey, string>;
-}
+};

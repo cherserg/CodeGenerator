@@ -1,4 +1,4 @@
-// Path: src/services/file-creator.service.ts
+// src/services/file-creator.service.ts
 
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -6,7 +6,7 @@ import prettier from "prettier";
 import {
   getPathCommentLine,
   stripOldPathComments,
-} from "../utils/pathCommentUtils";
+} from "../functions/path-comment.functions";
 
 export class FileCreatorService {
   /**

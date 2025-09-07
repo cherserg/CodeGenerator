@@ -2,7 +2,7 @@
   "name": "code-generator-cherserg",
   "displayName": "CodeGenerator by cherserg",
   "description": "Генерирует код и документацию на основе YAML-шаблонов",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "publisher": "cherserg",
   "engines": {
     "vscode": "^1.65.0"
@@ -48,9 +48,10 @@
     "pretest": "npm run compile",
     "test": "node ./out/test/runTest.js",
     "preversion": "git add -A",
-    "release:patch": "node release/release.js patch",
-    "release:minor": "node release/release.js minor",
-    "release:major": "node release/release.js major"
+    "cb": "node ./scripts/clean-bak.js",
+    "release:patch": "node scripts/release.js patch",
+    "release:minor": "node scripts/release.js minor",
+    "release:major": "node scripts/release.js major"
   },
   "files": [
     "out",

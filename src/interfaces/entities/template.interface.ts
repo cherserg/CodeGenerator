@@ -1,11 +1,11 @@
 // src/interfaces/entities/template.interface.ts
 
-export interface TemplatePart {
+export type TemplatePart = {
   key: string;
   content: string;
-}
+};
 
-export interface ITemplate {
+export type ITemplate = {
   /** Уникальный ключ шаблона (filename без пути) */
   key: string;
   /** Основной контент шаблона */
@@ -30,4 +30,4 @@ export interface ITemplate {
   pathName?: string;
   /** Порядок частей имени файла для этого шаблона */
   nameOrder?: Array<"entity" | "script" | "template">;
-}
+};

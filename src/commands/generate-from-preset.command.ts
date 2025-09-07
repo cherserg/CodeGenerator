@@ -1,8 +1,11 @@
 // src/commands/generateFromPreset.ts
-
 import * as path from "path";
 import { registerCommand } from "./_common";
-import { pickEntitiesWithPresets, pickPresetKeys } from "../utils/pick.utils";
+import {
+  pickEntitiesWithPresets,
+  pickPresetKeys,
+  pickProject, // <-- Добавлено
+} from "../functions/pick.functions";
 import { TemplateRepository } from "../repositories/template.repository";
 import { TemplatePartRepository } from "../repositories/template-part.repository";
 import { ScriptRepository } from "../repositories/script.repository";
@@ -10,7 +13,6 @@ import { EntityRepository } from "../repositories/entity.repository";
 import { PresetRepository } from "../repositories/preset.repository";
 import { RepositoryLoader } from "../loaders/repository.loader";
 import { TemplateManager } from "../managers/template.manager";
-
 import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
 import { IEntity } from "../interfaces/entities/entity.interface";
 import { IScript } from "../interfaces/entities/script.interface";
@@ -20,24 +22,46 @@ import {
   showError,
   showInfo,
   showWarning,
-} from "../utils/vscode.utils";
-import { readCodegenConfig } from "../utils/read-config.util";
-import { isTemplateApplicable } from "../utils/template-applicability.util";
+} from "../functions/vscode.functions";
+import { readCodegenConfig } from "../functions/read-config.functions";
+import { isTemplateApplicable } from "../functions/template-applicability.functions";
+import { findProjectsInWorkspace } from "../functions/project-discovery.functions"; // <-- Добавлено
 
 export function registerGenerateFromPresetCommand(context: any) {
   registerCommand(
     context,
     "codegenerator.generateFromPreset",
     async () => {
-      const root = getWorkspaceRoot();
+      const workspaceRoot = getWorkspaceRoot();
+
+      // ШАГ 1 и 2: Находим и выбираем проект
+      const projects = await findProjectsInWorkspace(workspaceRoot);
+      if (projects.length === 0) {
+        showWarning("Не найдено ни одного проекта с файлом codegen.json.");
+        return;
+      }
+
+      const selectedProject = await pickProject(
+        projects,
+        "Выберите проект для генерации из пресета"
+      );
+
+      if (!selectedProject) {
+        showWarning("Проект не выбран.");
+        return;
+      }
+
+      const projectRoot = selectedProject.path;
+
+      // Используем projectRoot для всех последующих операций
       const {
         configFolder,
         outputPath: globalOutputPath,
         outputExt,
         pathOrder: globalPathOrder,
         nameOrder: globalNameOrder,
-      } = await readCodegenConfig(root);
-      const baseDir = path.join(root, configFolder);
+      } = await readCodegenConfig(projectRoot);
+      const baseDir = path.join(projectRoot, configFolder);
 
       const tplRepo = new TemplateRepository();
       const partRepo = new TemplatePartRepository();
@@ -135,8 +159,8 @@ export function registerGenerateFromPresetCommand(context: any) {
             for (const tpl of applicableTemplates) {
               const outputConfig = {
                 outputPath: tpl.outputPath
-                  ? path.join(root, tpl.outputPath)
-                  : path.join(root, globalOutputPath),
+                  ? path.join(projectRoot, tpl.outputPath)
+                  : path.join(projectRoot, globalOutputPath),
                 outputExt,
                 pathOrder: tpl.pathOrder ?? globalPathOrder,
                 nameOrder: tpl.nameOrder ?? globalNameOrder,
@@ -149,7 +173,7 @@ export function registerGenerateFromPresetCommand(context: any) {
                 output: outputConfig,
               };
 
-              await manager.generate(request);
+              await manager.generate(request, workspaceRoot);
             }
           }
         }

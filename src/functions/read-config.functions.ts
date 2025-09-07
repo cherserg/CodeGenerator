@@ -1,11 +1,9 @@
-// src/utils/read-config.util.ts
+// src/functions/read-config.functions.ts
 
 import * as fs from "fs/promises";
 import * as path from "path";
-import {
-  ICodegenConfig,
-  DEFAULT_CONFIG,
-} from "../interfaces/agents/codegen-config.interface";
+import { ICodegenConfig } from "../interfaces";
+import { DEFAULT_CONFIG } from "../configs";
 
 export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
   const cfgPath = path.join(root, "codegen.json");

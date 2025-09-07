@@ -4,7 +4,7 @@ import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
 import prettier from "prettier";
-import { showWarning, showInfo } from "../utils/vscode.utils";
+import { showWarning, showInfo } from "../functions/vscode.functions";
 import { ISyncRule } from "./rules/rule.interface";
 import * as rules from "./rules";
 

@@ -1,6 +1,4 @@
 // src/commands/generateDocs.ts
-
-import * as fs from "fs/promises";
 import { registerCommand } from "./_common";
 import { TemplateRepository } from "../repositories/template.repository";
 import { TemplatePartRepository } from "../repositories/template-part.repository";
@@ -11,30 +9,55 @@ import { RepositoryLoader } from "../loaders/repository.loader";
 import { TemplateManager } from "../managers/template.manager";
 import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
 
-import { readCodegenConfig } from "../utils/read-config.util";
+import { readCodegenConfig } from "../functions/read-config.functions";
 import {
   getWorkspaceRoot,
   showInfo,
   showError,
   showWarning,
-} from "../utils/vscode.utils";
-import { pickScripts, pickEntities, pickTemplates } from "../utils/pick.utils";
-import { isTemplateApplicable } from "../utils/template-applicability.util";
+} from "../functions/vscode.functions";
+import {
+  pickScripts,
+  pickEntities,
+  pickTemplates,
+  pickProject,
+} from "../functions/pick.functions";
+import { isTemplateApplicable } from "../functions/template-applicability.functions";
+import { findProjectsInWorkspace } from "../functions/project-discovery.functions";
 
 export function registerGenerateDocsCommand(context: any) {
   registerCommand(
     context,
     "codegenerator.generateDocs",
     async () => {
-      const root = getWorkspaceRoot();
+      const workspaceRoot = getWorkspaceRoot();
+
+      const projects = await findProjectsInWorkspace(workspaceRoot);
+      if (projects.length === 0) {
+        showWarning("Не найдено ни одного проекта с файлом codegen.json.");
+        return;
+      }
+
+      const selectedProject = await pickProject(
+        projects,
+        "Выберите проект для генерации документации"
+      );
+
+      if (!selectedProject) {
+        showWarning("Проект не выбран.");
+        return;
+      }
+
+      const projectRoot = selectedProject.path;
+
       const {
         configFolder,
         outputPath: globalOutputPath,
         outputExt,
         pathOrder: globalPathOrder,
         nameOrder: globalNameOrder,
-      } = await readCodegenConfig(root);
-      const baseDir = `${root}/${configFolder}`;
+      } = await readCodegenConfig(projectRoot);
+      const baseDir = `${projectRoot}/${configFolder}`;
 
       const tplRepo = new TemplateRepository();
       const partRepo = new TemplatePartRepository();
@@ -57,7 +80,7 @@ export function registerGenerateDocsCommand(context: any) {
       );
 
       /* ---------- оставляем только скрипты, у которых есть подходящие шаблоны
-                    для ХОТЯ БЫ одной из выбранных сущностей (или без сущности) ---------- */
+                    для ХОТЯ БЫ одной из выбранных сущностей (или без сущности) ---------- */
       const allTemplates = tplRepo.getAll();
       const scriptsWithTemplates = scriptsRepo
         .getAll()
@@ -92,8 +115,8 @@ export function registerGenerateDocsCommand(context: any) {
 
       for (const tpl of templates) {
         const effectiveOutputPath = tpl.outputPath
-          ? `${root}/${tpl.outputPath}`
-          : `${root}/${globalOutputPath}`;
+          ? `${projectRoot}/${tpl.outputPath}`
+          : `${projectRoot}/${globalOutputPath}`;
         const outputConfig = {
           outputPath: effectiveOutputPath,
           outputExt,
@@ -111,7 +134,7 @@ export function registerGenerateDocsCommand(context: any) {
               entity: ent,
               output: outputConfig,
             };
-            await manager.generate(req);
+            await manager.generate(req, workspaceRoot);
           }
         }
       }

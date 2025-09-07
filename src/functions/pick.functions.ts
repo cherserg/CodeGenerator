@@ -1,10 +1,8 @@
-// src/utils/pick.utils.ts
-
-import { QuickPickService } from "./quick-pick.service";
-import { IEntity } from "../interfaces/entities/entity.interface";
-import { IScript } from "../interfaces/entities/script.interface";
-import { ITemplate } from "../interfaces/entities/template.interface";
-import { isTemplateApplicable } from "./template-applicability.util";
+// src/functions/pick.functions.ts
+import { QuickPickService } from "../services/quick-pick.service";
+import type { IEntity, IScript, ITemplate } from "../interfaces";
+import { isTemplateApplicable } from "./template-applicability.functions";
+import { IProject } from "./project-discovery.functions";
 
 /* ---------- универсальный выбор строк ---------- */
 export async function pickStrings(
@@ -12,6 +10,32 @@ export async function pickStrings(
   placeHolder: string
 ): Promise<string[]> {
   return QuickPickService.pickStrings(values, placeHolder);
+}
+
+/* ---------- выбор проекта ---------- */
+export async function pickProject(
+  projects: IProject[],
+  placeHolder: string
+): Promise<IProject | undefined> {
+  if (projects.length === 0) {
+    return undefined;
+  }
+  // Если проект всего один, выбираем его автоматически без диалога
+  if (projects.length === 1) {
+    return projects[0];
+  }
+
+  const pickedNames = await QuickPickService.pickStrings(
+    projects.map((p) => p.name),
+    placeHolder,
+    false // Нам нужен только один выбор
+  );
+
+  if (!pickedNames || pickedNames.length === 0) {
+    return undefined;
+  }
+
+  return projects.find((p) => p.name === pickedNames[0]);
 }
 
 /* ---------- выбор скриптов ---------- */

@@ -13,6 +13,6 @@ function registerCommands(context: vscode.ExtensionContext) {
   commands.registerGenerateDocsCommand(context);
   commands.registerRestoreDocsCommand(context);
   commands.registerGenerateFromPresetCommand(context);
-  commands.registerSyncIndexCommand(context);
+  commands.registerSyncBarrelFilesCommand(context);
   commands.registerPathCommentCommand(context);
 }
