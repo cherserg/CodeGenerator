@@ -14,4 +14,6 @@ export type ICodegenConfig = {
   syncIndexExt?: string;
   syncIndexPath?: string /** Имя для barrel-файла (без расширения). По умолчанию "index". */;
   barrelName?: string;
+  commentExt?: string[];
+  commentRemovalPatterns?: string[];
 };

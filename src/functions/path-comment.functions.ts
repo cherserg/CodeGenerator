@@ -5,40 +5,14 @@ import * as path from "path";
 
 /**
  * Формирует строку комментария с относительным путём для записи в файл.
- * Всегда возвращает строку вида "// src/path/to/file.ts".
+ * Всегда возвращает строку вида "// path/to/file.ts".
  */
 export function getPathCommentLine(
   fileFsPath: string,
   workspaceRoot: string
 ): string {
   const rel = path.relative(workspaceRoot, fileFsPath).replace(/\\/g, "/");
-  // ИЗМЕНЕНО: Убираем префикс "Path: ", чтобы сделать проверку более точной
   return `// ${rel}`;
-}
-
-/**
- * Убирает из начала текста все строки-комментарии, соответствующие
- * старым вставкам пути, чтобы перед новым комментарием не остались дубликаты.
- *
- * Убирает наибольшие два первых комментария, если они:
- * • начинаются с "// Path:"
- * • или с "// src/"
- * • или с "// Этот файл"
- */
-export function stripOldPathComments(content: string): string {
-  const lines = content.split("\n");
-  let i = 0;
-  while (
-    i < 2 &&
-    lines[i] != null &&
-    (lines[i].trim().startsWith("// Path:") ||
-      lines[i].trim().startsWith("// src/") ||
-      lines[i].trim().startsWith("// packages/") ||
-      lines[i].trim().startsWith("// Этот файл"))
-  ) {
-    i++;
-  }
-  return lines.slice(i).join("\n");
 }
 
 /**
@@ -47,32 +21,47 @@ export function stripOldPathComments(content: string): string {
  */
 export function prepareSaveCommentsEdits(
   doc: vscode.TextDocument,
-  workspaceRoot: string
+  workspaceRoot: string,
+  patterns: string[]
 ): vscode.TextEdit[] {
   const correctPathLine = getPathCommentLine(doc.uri.fsPath, workspaceRoot);
-  const firstLine = doc.lineAt(0);
 
-  // Если первая строка уже содержит правильный комментарий, ничего не делаем
-  if (firstLine.text.trim() === correctPathLine) {
+  const lines = doc.getText().split("\n");
+  let firstCodeLineIndex = 0;
+  let foundCode = false;
+
+  // Находим первую строку, которая НЕ является удаляемым комментарием или пустой строкой.
+  for (let i = 0; i < lines.length; i++) {
+    const trimmedLine = lines[i].trim();
+    if (trimmedLine === "") {
+      continue;
+    }
+    const isRemovableComment = patterns.some((p) => trimmedLine.startsWith(p));
+    if (!isRemovableComment) {
+      firstCodeLineIndex = i;
+      foundCode = true;
+      break;
+    }
+  }
+
+  // Обрабатываем случай, когда файл пуст или содержит только комментарии.
+  if (!foundCode) {
+    firstCodeLineIndex = doc.lineCount;
+  }
+
+  const headerRange = new vscode.Range(0, 0, firstCodeLineIndex, 0);
+  const existingHeaderText = doc.getText(headerRange);
+
+  // Нормализуем, убирая все пробельные символы, чтобы сравнить только контент.
+  const normalizedExisting = existingHeaderText.replace(/\s/g, "");
+  const normalizedCorrect = correctPathLine.replace(/\s/g, "");
+
+  // Если единственный не-пробельный контент в заголовке - это правильный путь, ничего не делаем.
+  if (normalizedExisting === normalizedCorrect) {
     return [];
   }
 
-  // Проверяем, является ли первая строка "старым" комментарием пути
-  const isOldComment =
-    firstLine.text.trim().startsWith("// Path:") ||
-    firstLine.text.trim().startsWith("// src/") ||
-    firstLine.text.trim().startsWith("// Этот файл");
-
-  if (isOldComment) {
-    // Если это старый комментарий, заменяем его на правильный
-    return [vscode.TextEdit.replace(firstLine.range, correctPathLine)];
-  } else {
-    // Если первая строка - это код, вставляем новый комментарий и пустую строку перед ним
-    return [
-      vscode.TextEdit.insert(
-        new vscode.Position(0, 0),
-        `${correctPathLine}\n\n`
-      ),
-    ];
-  }
+  // В противном случае, заменяем весь блок заголовка.
+  const newHeaderText = `${correctPathLine}\n\n`;
+  return [vscode.TextEdit.replace(headerRange, newHeaderText)];
 }

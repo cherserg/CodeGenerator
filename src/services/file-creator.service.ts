@@ -3,42 +3,27 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import prettier from "prettier";
-import {
-  getPathCommentLine,
-  stripOldPathComments,
-} from "../functions/path-comment.functions";
 
 export class FileCreatorService {
   /**
    * Сохраняет `content` в `outDir/fileName`.
-   * Если передан `workspaceRoot`, то
-   * — удаляет существующие “// Path:” в начале,
-   * — добавляет строку `// Path: относительный/путь/к/файлу`
-   * ещё ДО форматирования и записи.
-   *
    * При отличии содержимого создаётся резервная копия (.bak.YYYYMMDDTHHMMSS).
+   * Комментарий с путём к файлу добавляется автоматически при сохранении через хук onWillSaveTextDocument.
    */
   public async save(
     outDir: string,
     fileName: string,
     content: string,
-    workspaceRoot?: string
+    workspaceRoot?: string // workspaceRoot больше не используется для комментариев, но может пригодиться для других целей.
   ): Promise<void> {
-    // 1. гарантируем существование каталога
+    // 1. Гарантируем существование каталога
     await fs.mkdir(outDir, { recursive: true });
     const fullPath = path.join(outDir, fileName);
 
-    // 2. подготавливаем тело с единственным комментарием Path
-    let body = content;
-    if (workspaceRoot) {
-      // убираем старые Path-комментарии
-      body = stripOldPathComments(body);
-      // добавляем актуальный
-      const pathLine = getPathCommentLine(fullPath, workspaceRoot);
-      body = `${pathLine}\n\n${body}`;
-    }
+    // 2. Тело файла — это просто контент. Комментарий будет добавлен хуком VS Code.
+    const body = content;
 
-    // 3. находим конфиг Prettier
+    // 3. Находим конфиг Prettier
     let prettierCfg: prettier.Options | null = null;
     try {
       prettierCfg = await prettier.resolveConfig(fullPath);
@@ -46,7 +31,7 @@ export class FileCreatorService {
       // игнорируем
     }
 
-    // 4. выбираем парсер по расширению
+    // 4. Выбираем парсер по расширению
     const ext = path.extname(fileName).toLowerCase();
     const parser: prettier.BuiltInParserName =
       ext === ".ts" || ext === ".tsx"
@@ -61,7 +46,7 @@ export class FileCreatorService {
                 ? "markdown"
                 : "babel";
 
-    // 5. форматируем
+    // 5. Форматируем
     let formatted: string;
     try {
       formatted = await prettier.format(body, {
@@ -73,7 +58,7 @@ export class FileCreatorService {
       formatted = body;
     }
 
-    // 6. бэкап при изменении
+    // 6. Бэкап при изменении
     let needBackup = false;
     try {
       const old = await fs.readFile(fullPath, "utf-8");
@@ -96,7 +81,7 @@ export class FileCreatorService {
       await fs.copyFile(fullPath, `${fullPath}.bak.${stamp}`);
     }
 
-    // 7. финальная запись
+    // 7. Финальная запись
     await fs.writeFile(fullPath, formatted, "utf-8");
   }
 }

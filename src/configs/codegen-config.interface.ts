@@ -12,4 +12,10 @@ export const DEFAULT_CONFIG: ICodegenConfig = {
   ignoreSync: [],
   syncIndexExt: ".ts",
   barrelName: "index",
+  commentRemovalPatterns: [
+    "// Path:",
+    "// src/",
+    "// packages/",
+    "// Этот файл",
+  ],
 };

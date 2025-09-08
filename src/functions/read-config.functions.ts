@@ -12,10 +12,6 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
   try {
     const raw = await fs.readFile(cfgPath, "utf8");
     cfgRaw = JSON.parse(raw);
-    console.log(
-      `✅ Config loaded successfully from ${cfgPath}. Found syncIndexExt:`,
-      cfgRaw.syncIndexExt
-    );
   } catch (error: any) {
     console.error(
       `❌ Failed to read or parse codegen.json. Falling back to default config.`,
@@ -24,13 +20,12 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
         error: error.message,
       }
     );
-  } // Сначала определяем outputPath, так как он может быть fallback'ом
-
+  }
   const outputPath = cfgRaw.outputPath?.trim() || DEFAULT_CONFIG.outputPath;
 
   return {
     configFolder: cfgRaw.configFolder?.trim() || DEFAULT_CONFIG.configFolder,
-    outputPath: outputPath, // ✅ ИЗМЕНЕНИЕ: Добавляем чтение нового поля с fallback'ом на outputPath
+    outputPath: outputPath,
     syncIndexPath: cfgRaw.syncIndexPath?.trim() || outputPath,
     outputExt:
       (cfgRaw.outputExt as ICodegenConfig["outputExt"]) ||
@@ -46,5 +41,11 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
       : DEFAULT_CONFIG.ignoreSync,
     syncIndexExt: cfgRaw.syncIndexExt?.trim() || DEFAULT_CONFIG.syncIndexExt,
     barrelName: cfgRaw.barrelName?.trim() || DEFAULT_CONFIG.barrelName,
+    commentExt: Array.isArray(cfgRaw.commentExt) // <-- Добавлено
+      ? cfgRaw.commentExt
+      : DEFAULT_CONFIG.commentExt,
+    commentRemovalPatterns: Array.isArray(cfgRaw.commentRemovalPatterns) // <-- Добавлено
+      ? cfgRaw.commentRemovalPatterns
+      : DEFAULT_CONFIG.commentRemovalPatterns,
   };
 }

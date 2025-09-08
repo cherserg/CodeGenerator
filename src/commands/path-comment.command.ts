@@ -1,8 +1,10 @@
-// src/commands/pathComment.ts
+// src/commands/path-comment.command.ts
+
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs/promises";
 import { prepareSaveCommentsEdits } from "../functions/path-comment.functions";
+import { readCodegenConfig } from "../functions/read-config.functions";
 
 /**
  * Находит ближайший корневой каталог проекта (содержащий codegen.json),
@@ -35,33 +37,6 @@ async function findNearestProjectRoot(
   return null; // Не нашли codegen.json на пути к корню
 }
 
-async function getCommentExts(projectRoot: string): Promise<string[]> {
-  let extensions: string[] = [".ts", ".tsx"]; // Значение по умолчанию
-  try {
-    const raw = await fs.readFile(
-      path.join(projectRoot, "codegen.json"),
-      "utf8"
-    );
-    const cfg = JSON.parse(raw);
-
-    if (Array.isArray(cfg.commentExt)) {
-      const filteredExts = cfg.commentExt.filter(
-        (ext: any) => typeof ext === "string" && ext.trim()
-      );
-      if (filteredExts.length > 0) {
-        extensions = filteredExts;
-      }
-    }
-  } catch (e: any) {
-    console.error(
-      "PATH_COMMENT: Failed to read or parse codegen.json, using default. Error:",
-      e.message
-    );
-  }
-
-  return extensions.map((ext) => (ext.startsWith(".") ? ext : `.${ext}`));
-}
-
 export function registerPathCommentCommand(context: vscode.ExtensionContext) {
   const disposable = vscode.workspace.onWillSaveTextDocument((e) => {
     const editsPromise = (async () => {
@@ -85,16 +60,20 @@ export function registerPathCommentCommand(context: vscode.ExtensionContext) {
         return [];
       }
 
-      // Читаем разрешенные расширения из конфига найденного проекта
-      const fileExt = path.extname(fileFsPath);
-      const allowedExts = await getCommentExts(projectRoot);
+      // Читаем конфигурацию проекта
+      const config = await readCodegenConfig(projectRoot);
+      const allowedExts = (config.commentExt || []).map((ext) =>
+        ext.startsWith(".") ? ext : `.${ext}`
+      );
+      const removalPatterns = config.commentRemovalPatterns || [];
 
+      const fileExt = path.extname(fileFsPath);
       if (!allowedExts.includes(fileExt)) {
         return [];
       }
 
       // Комментарий всегда должен быть от корня всего монорепозитория (workspaceRoot)
-      return prepareSaveCommentsEdits(document, workspaceRoot);
+      return prepareSaveCommentsEdits(document, workspaceRoot, removalPatterns);
     })();
 
     e.waitUntil(editsPromise);
