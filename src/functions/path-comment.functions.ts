@@ -1,4 +1,4 @@
-// src/utils/pathCommentUtils.ts
+// src/functions/path-comment.functions.ts
 
 import * as vscode from "vscode";
 import * as path from "path";
@@ -33,6 +33,7 @@ export function stripOldPathComments(content: string): string {
     lines[i] != null &&
     (lines[i].trim().startsWith("// Path:") ||
       lines[i].trim().startsWith("// src/") ||
+      lines[i].trim().startsWith("// packages/") ||
       lines[i].trim().startsWith("// Этот файл"))
   ) {
     i++;
