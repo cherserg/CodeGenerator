@@ -1,5 +1,3 @@
-// src/services/document-generator.service.ts
-
 import { ITemplate } from "../interfaces/entities/template.interface";
 import { TemplatePartRepository } from "../repositories/template-part.repository";
 
@@ -33,7 +31,7 @@ export class DocumentGeneratorService {
       return part ? part.content : "";
     });
 
-    // Возвращаем без заголовка — он добавится при сохранении
+    // Возвращаем чистый контент — заголовок добавится на этапе сохранения файла.
     return raw;
   }
 }

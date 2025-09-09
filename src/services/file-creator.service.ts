@@ -1,27 +1,27 @@
-// src/services/file-creator.service.ts
-
 import * as fs from "fs/promises";
 import * as path from "path";
 import prettier from "prettier";
+import { getPathCommentLine } from "../functions/path-comment.functions";
 
 export class FileCreatorService {
   /**
    * Сохраняет `content` в `outDir/fileName`.
-   * При отличии содержимого создаётся резервная копия (.bak.YYYYMMDDTHHMMSS).
-   * Комментарий с путём к файлу добавляется автоматически при сохранении через хук onWillSaveTextDocument.
+   * Создаёт резервную копию (.bak.YYYYMMDDTHHMMSS) при отличии содержимого.
+   * Вставляет комментарий с путём к файлу в начало.
    */
   public async save(
     outDir: string,
     fileName: string,
     content: string,
-    workspaceRoot?: string // workspaceRoot больше не используется для комментариев, но может пригодиться для других целей.
+    workspaceRoot: string
   ): Promise<void> {
     // 1. Гарантируем существование каталога
     await fs.mkdir(outDir, { recursive: true });
     const fullPath = path.join(outDir, fileName);
 
-    // 2. Тело файла — это просто контент. Комментарий будет добавлен хуком VS Code.
-    const body = content;
+    // 2. Генерируем комментарий с путем и добавляем его в начало контента.
+    const pathComment = getPathCommentLine(fullPath, workspaceRoot);
+    const body = `${pathComment}\n\n${content}`;
 
     // 3. Находим конфиг Prettier
     let prettierCfg: prettier.Options | null = null;
