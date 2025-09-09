@@ -1,10 +1,13 @@
-// src/services/sync-index.service.ts
-
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
 import prettier from "prettier";
-import { showWarning, showInfo } from "../functions/vscode.functions";
+import {
+  showWarning,
+  showInfo,
+  getWorkspaceRoot,
+} from "../functions/vscode.functions";
+import { getPathCommentLine } from "../functions/path-comment.functions";
 import { ISyncRule } from "./rules/rule.interface";
 import * as rules from "./rules";
 
@@ -44,32 +47,34 @@ export class SyncIndexService {
       return false;
     }
 
+    const workspaceRoot = getWorkspaceRoot();
     let anyChanged = false;
 
     for (const dir of folders) {
       if (this.isIgnored(dir)) continue;
 
       try {
-        const { folders: sub, files } = await this.collectModules(dir); // Делегируем генерацию контента правилам
-        const raw = this.rules.generateContent(sub, files, this.syncExt);
+        const { folders: sub, files } = await this.collectModules(dir);
+        const rawBody = this.rules.generateContent(sub, files, this.syncExt);
 
         const indexFileName = `${this.barrelName}${this.syncExt}`;
         const idx = path.join(dir, indexFileName);
-        const fmt = await this.formatWithPrettier(idx, raw);
+        const formattedBody = await this.formatWithPrettier(idx, rawBody);
 
-        let existing: string | null = null;
+        const pathComment = getPathCommentLine(idx, workspaceRoot);
+        const finalContent = `${pathComment}\n\n${formattedBody}`;
+
+        let existingContent: string | null = null;
         try {
-          existing = await fs.readFile(idx, "utf8");
+          existingContent = await fs.readFile(idx, "utf8");
         } catch {}
 
-        if (existing !== null) {
-          const oldBody = this.stripHeader(existing);
-          const newBody = this.stripHeader(fmt);
-          if (oldBody === newBody) continue;
+        if (existingContent === finalContent) {
+          continue;
         }
 
         await this.backupIfExists(idx);
-        await fs.writeFile(idx, fmt, "utf8");
+        await fs.writeFile(idx, finalContent, "utf8");
         anyChanged = true;
       } catch (err: any) {
         showWarning(`Не удалось обработать папку "${dir}": ${err.message}`);
