@@ -1,17 +1,42 @@
-// src/services/name-builder.service.ts
-
 import { IOutput } from "../interfaces/entities/gen-request.interface";
 import { ITemplate } from "../interfaces/entities/template.interface";
+
+/**
+ * Преобразует строку из PascalCase или camelCase в kebab-case.
+ * @example
+ * toKebabCase("SignOut") // "sign-out"
+ * toKebabCase("mySuperVariable") // "my-super-variable"
+ */
+function toKebabCase(str: string): string {
+  if (!str) {
+    return "";
+  }
+  // Находим все заглавные буквы
+  return str.replace(/[A-Z]/g, (letter, index) => {
+    // Если это первая буква в строке (index === 0) - просто делаем ее строчной.
+    // Для всех остальных - добавляем перед ней дефис и делаем строчной.
+    return index === 0 ? letter.toLowerCase() : `-${letter.toLowerCase()}`;
+  });
+}
 
 export class NameBuilderService {
   public generate(
     entityVars: Record<string, string>,
     scriptVars: Record<string, string>,
     template: ITemplate,
-    output: IOutput
+    output: IOutput,
+    userVariables: Record<string, string> = {}
   ): string {
-    // Тримим значение и убираем, если получится пустая строка
-    const tplNameRaw = template.pathName?.trim();
+    const allVars = { ...scriptVars, ...entityVars, ...userVariables };
+
+    // Обрабатываем имя из шаблона: подставляем переменные и конвертируем в kebab-case
+    const tplNameRaw = (template.pathName ?? "")
+      .trim()
+      .replace(/{{\s*(\w+)\s*}}/g, (_match, key) => {
+        const value = allVars[key] ?? "";
+        return toKebabCase(value);
+      });
+
     const tplName =
       tplNameRaw && tplNameRaw.length > 0 ? tplNameRaw : undefined;
 
@@ -28,8 +53,6 @@ export class NameBuilderService {
       .map((key) => partsMap[key])
       .filter((part): part is string => Boolean(part));
 
-    // ИЗМЕНЕНО: Убрана привязка к типу TExtension. Теперь используется любое расширение.
-    // Это позволяет другим командам генерации также работать с любыми файлами.
     const ext = template.outputExt || output.outputExt;
     return parts.join(".") + ext;
   }

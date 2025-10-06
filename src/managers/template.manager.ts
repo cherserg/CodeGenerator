@@ -1,4 +1,3 @@
-// src/managers/template.manager.ts
 import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
 import { DocumentGeneratorService } from "../services/document-generator.service";
 import { PathCreatorService } from "../services/path-creator.service";
@@ -20,13 +19,14 @@ export class TemplateManager {
     req: IGenerationRequest,
     workspaceRoot: string
   ): Promise<void> {
-    const { template, entity, script, output } = req;
+    const { template, entity, script, output, userVariables } = req;
 
     const entityVars = entity?.variables ?? {};
     const docBody = this.docService.generate(
       template,
       entityVars,
-      script.variables
+      script.variables,
+      userVariables
     );
 
     const outDir = this.pathService.generate(
@@ -38,7 +38,8 @@ export class TemplateManager {
       entityVars,
       script.variables,
       template,
-      output
+      output,
+      userVariables
     );
 
     await this.fileService.save(outDir, fileName, docBody, workspaceRoot);

@@ -1,4 +1,4 @@
-// src/commands/generateDocs.ts
+import * as vscode from "vscode";
 import { registerCommand } from "./_common";
 import { TemplateRepository } from "../repositories/template.repository";
 import { TemplatePartRepository } from "../repositories/template-part.repository";
@@ -79,8 +79,7 @@ export function registerGenerateDocsCommand(context: any) {
         "Выберите сущности (или пункт «Без сущности»)"
       );
 
-      /* ---------- оставляем только скрипты, у которых есть подходящие шаблоны
-                    для ХОТЯ БЫ одной из выбранных сущностей (или без сущности) ---------- */
+      /* ---------- оставляем только скрипты, у которых есть подходящие шаблоны ---------- */
       const allTemplates = tplRepo.getAll();
       const scriptsWithTemplates = scriptsRepo
         .getAll()
@@ -113,6 +112,18 @@ export function registerGenerateDocsCommand(context: any) {
 
       const manager = new TemplateManager(partRepo);
 
+      // Определяем системные переменные, которые не нужно запрашивать у пользователя
+      const SYSTEM_VARIABLES = new Set([
+        "entityName",
+        "entitySmallName",
+        "entityBigName",
+        "scriptName",
+        "scriptSmallName",
+        "scriptBigName",
+        "pathName",
+        "path",
+      ]);
+
       for (const tpl of templates) {
         const effectiveOutputPath = tpl.outputPath
           ? `${projectRoot}/${tpl.outputPath}`
@@ -128,11 +139,58 @@ export function registerGenerateDocsCommand(context: any) {
           for (const ent of entities) {
             if (!isTemplateApplicable(tpl, scr, ent)) continue;
 
+            // --- НОВАЯ ЛОГИКА: Обнаружение и запрос динамических переменных ---
+            const userVariables: Record<string, string> = {};
+            const placeholders = new Set<string>();
+            const combinedTemplateString = `${tpl.content} ${
+              tpl.pathName ?? ""
+            }`;
+            const placeholderRegex = /{{\s*(\w+)\s*}}/g;
+            let match;
+
+            while (
+              (match = placeholderRegex.exec(combinedTemplateString)) !== null
+            ) {
+              placeholders.add(match[1]);
+            }
+
+            const dynamicVariables = [...placeholders].filter(
+              (p) => !SYSTEM_VARIABLES.has(p)
+            );
+
+            let wasCancelled = false;
+            for (const varName of dynamicVariables) {
+              const value = await vscode.window.showInputBox({
+                prompt: `Введите значение для переменной "{{${varName}}}"`,
+                placeHolder: `Например: SignIn, CreateUser`,
+                validateInput: (text) => {
+                  return text.trim().length > 0
+                    ? null
+                    : "Значение не может быть пустым.";
+                },
+              });
+
+              if (value === undefined) {
+                // Пользователь отменил ввод
+                wasCancelled = true;
+                break;
+              }
+              userVariables[varName] = value.trim();
+            }
+
+            if (wasCancelled) {
+              showWarning("Генерация отменена.");
+              // Прерываем только текущую итерацию, чтобы не отменять всю генерацию
+              continue;
+            }
+            // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+
             const req: IGenerationRequest = {
               template: tpl,
               script: scr,
               entity: ent,
               output: outputConfig,
+              userVariables, // Передаем собранные переменные
             };
             await manager.generate(req, workspaceRoot);
           }

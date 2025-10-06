@@ -7,23 +7,25 @@ export class DocumentGeneratorService {
   public generate(
     template: ITemplate,
     entityVars: Record<string, string>,
-    scriptVars: Record<string, string>
+    scriptVars: Record<string, string>,
+    userVariables: Record<string, string> = {}
   ): string {
     // Берём основной контент шаблона
     let raw = template.content || "";
+    const allVars = { ...scriptVars, ...entityVars, ...userVariables };
 
     // 1) Обработаем «динамические» include’ы вида {{> {{pathName}}-controller-part}}
     raw = raw.replace(
       /{{>\s*{{\s*(\w+)\s*}}\s*-\s*([^\s}]+)\s*}}/g,
       (_match, varName, suffix) => {
-        const ent = entityVars[varName];
+        const ent = allVars[varName];
         return ent ? `{{> ${ent}-${suffix}}}` : "";
       }
     );
 
     // 2) Подставляем все переменные {{KEY}}
-    const vars = { ...scriptVars, ...entityVars };
-    raw = raw.replace(/{{\s*(\w+)\s*}}/g, (_match, key) => vars[key] ?? "");
+    // Используем allVars, где переменные пользователя имеют приоритет
+    raw = raw.replace(/{{\s*(\w+)\s*}}/g, (_match, key) => allVars[key] ?? "");
 
     // 3) Разворачиваем include-подшаблоны {{> partKey}}
     raw = raw.replace(/{{>\s*([^\s}]+)\s*}}/g, (_match, partKey) => {
