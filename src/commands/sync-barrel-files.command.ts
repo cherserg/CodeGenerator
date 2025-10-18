@@ -1,4 +1,3 @@
-// src/commands/sync-barrel-files.command.ts
 import * as fs from "fs/promises";
 import { Dirent } from "fs";
 import * as path from "path";
@@ -19,9 +18,8 @@ export function registerSyncBarrelFilesCommand(context: any) {
     context,
     "codegenerator.syncIndex",
     async () => {
-      const workspaceRoot = getWorkspaceRoot();
+      const workspaceRoot = getWorkspaceRoot(); // ШАГ 1 и 2: Находим и выбираем проект
 
-      // ШАГ 1 и 2: Находим и выбираем проект
       const projects = await findProjectsInWorkspace(workspaceRoot);
       if (projects.length === 0) {
         showWarning("Не найдено ни одного проекта с файлом codegen.json.");
@@ -38,12 +36,10 @@ export function registerSyncBarrelFilesCommand(context: any) {
         return;
       }
 
-      const projectRoot = selectedProject.path;
+      const projectRoot = selectedProject.path; // Используем projectRoot для всех последующих операций
 
-      // Используем projectRoot для всех последующих операций
-      const cfg = await readCodegenConfig(projectRoot);
+      const cfg = await readCodegenConfig(projectRoot); // Проверяем наличие syncIndexPath
 
-      // Проверяем наличие syncIndexPath
       if (!cfg.syncIndexPath) {
         showError('Параметр "syncIndexPath" не указан в codegen.json.');
         return;
@@ -111,7 +107,8 @@ export function registerSyncBarrelFilesCommand(context: any) {
         baseDir,
         cfg.syncIndexExt,
         absIgnorePatterns,
-        cfg.barrelName
+        cfg.barrelName,
+        cfg.syncSkipFoldersContaining // <-- ИЗМЕНЕНО
       );
       const visibleFolders = allFolders.filter(
         (rel) => !svcPreview.isIgnored(path.join(baseDir, rel))
@@ -120,7 +117,7 @@ export function registerSyncBarrelFilesCommand(context: any) {
       const items: vscode.QuickPickItem[] = visibleFolders
         .map((rel) => {
           const depth = rel.split("/").length - 1;
-          const indent = "  ".repeat(depth);
+          const indent = "  ".repeat(depth);
           return {
             label: `${indent}└ ${path.basename(rel)}`,
             description: rel,
@@ -150,7 +147,8 @@ export function registerSyncBarrelFilesCommand(context: any) {
         baseDir,
         cfg.syncIndexExt,
         absIgnorePatterns,
-        cfg.barrelName
+        cfg.barrelName,
+        cfg.syncSkipFoldersContaining // <-- ИЗМЕНЕНО
       );
       try {
         const ok = await svc.runOnFolders(toSyncAbs);

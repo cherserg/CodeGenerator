@@ -20,7 +20,8 @@ export class SyncIndexService {
     private baseDir: string,
     private syncExt: string = ".ts",
     ignorePatterns: string[] = [],
-    private barrelName: string = "index"
+    private barrelName: string = "index",
+    private syncSkipFoldersContaining: string[] = [] // <-- ИЗМЕНЕНО
   ) {
     // Выбираем подходящий набор правил или используем TS-правила по умолчанию
     this.rules = rules.ruleRegistry[syncExt.toLowerCase()] || rules.tsRules;
@@ -51,8 +52,15 @@ export class SyncIndexService {
     let anyChanged = false;
 
     for (const dir of folders) {
-      if (this.isIgnored(dir)) continue;
+      if (this.isIgnored(dir)) continue; // --- НОВАЯ ЛОГИКА ПРОВЕРКИ ---
 
+      const folderName = path.basename(dir);
+      const shouldSkip = this.syncSkipFoldersContaining.some((marker) =>
+        folderName.includes(marker)
+      );
+      if (shouldSkip) {
+        continue; // Пропускаем эту папку, не создаем в ней index.ts
+      } // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
       try {
         const { folders: sub, files } = await this.collectModules(dir);
         const rawBody = this.rules.generateContent(sub, files, this.syncExt);

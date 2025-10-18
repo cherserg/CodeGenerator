@@ -18,4 +18,5 @@ export const DEFAULT_CONFIG: ICodegenConfig = {
     "// packages/",
     "// Этот файл",
   ],
+  syncSkipFoldersContaining: [],
 };

@@ -16,4 +16,9 @@ export type ICodegenConfig = {
   barrelName?: string;
   commentExt?: string[];
   commentRemovalPatterns?: string[];
+  /**
+   * Игнорировать создание/обновление barrel-файла в папках,
+   * имена которых содержат один из этих маркеров (например, [".module", ".manual"]).
+   */
+  syncSkipFoldersContaining?: string[];
 };

@@ -1,5 +1,3 @@
-// src/functions/read-config.functions.ts
-
 import * as fs from "fs/promises";
 import * as path from "path";
 import { ICodegenConfig } from "../interfaces";
@@ -41,11 +39,14 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
       : DEFAULT_CONFIG.ignoreSync,
     syncIndexExt: cfgRaw.syncIndexExt?.trim() || DEFAULT_CONFIG.syncIndexExt,
     barrelName: cfgRaw.barrelName?.trim() || DEFAULT_CONFIG.barrelName,
-    commentExt: Array.isArray(cfgRaw.commentExt) // <-- Добавлено
+    commentExt: Array.isArray(cfgRaw.commentExt)
       ? cfgRaw.commentExt
       : DEFAULT_CONFIG.commentExt,
-    commentRemovalPatterns: Array.isArray(cfgRaw.commentRemovalPatterns) // <-- Добавлено
+    commentRemovalPatterns: Array.isArray(cfgRaw.commentRemovalPatterns)
       ? cfgRaw.commentRemovalPatterns
       : DEFAULT_CONFIG.commentRemovalPatterns,
+    syncSkipFoldersContaining: Array.isArray(cfgRaw.syncSkipFoldersContaining) // <-- ДОБАВЛЕНО
+      ? cfgRaw.syncSkipFoldersContaining
+      : DEFAULT_CONFIG.syncSkipFoldersContaining,
   };
 }
