@@ -19,4 +19,5 @@ export const DEFAULT_CONFIG: ICodegenConfig = {
     "// Этот файл",
   ],
   syncSkipFoldersContaining: [],
+  commentExt: [".ts", ".tsx", ".dart"],
 };

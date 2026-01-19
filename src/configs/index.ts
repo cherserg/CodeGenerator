@@ -1,1 +1,1 @@
-export * from "./codegen-config.interface";
+export * from "./codegen.default.config";
