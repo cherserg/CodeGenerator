@@ -32,7 +32,7 @@ export class DocumentGeneratorService {
         return part.content;
       }
       // Если часть не найдена, оставляем заметку в коде для отладки
-      return `/* TemplatePart not found: ${partKey} */`;
+      return "";
     });
 
     return content;
