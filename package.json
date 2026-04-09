@@ -2,7 +2,7 @@
   "name": "code-generator-cherserg",
   "displayName": "CodeGenerator by cherserg",
   "description": "Генерирует код и документацию на основе YAML-шаблонов",
-  "version": "0.1.32",
+  "version": "0.1.33",
   "publisher": "cherserg",
   "engines": {
     "vscode": "^1.65.0"
@@ -58,13 +58,15 @@
     "node_modules"
   ],
   "devDependencies": {
-    "@types/node": "^14.17.6",
+    "@types/node": "^14.18.63",
     "typescript": "^4.5.2",
     "vsce": "^2.5.0",
     "vscode": "^1.1.37"
   },
   "dependencies": {
+    "fs": "^0.0.1-security",
     "gray-matter": "^4.0.3",
+    "path": "^0.12.7",
     "prettier": "^3.5.3",
     "yaml": "^2.8.0"
   }

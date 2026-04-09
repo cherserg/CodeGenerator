@@ -1,31 +1,30 @@
+// src/services/sync-index.service.ts
+
 import * as fs from "fs/promises";
-import { Dirent } from "fs";
 import * as path from "path";
-import prettier from "prettier";
 import {
-  showWarning,
-  showInfo,
   getWorkspaceRoot,
+  showInfo,
+  showWarning,
 } from "../functions/vscode.functions";
-import { getPathCommentLine } from "../functions/path-comment.functions";
-import { ISyncRule } from "./rules/rule.interface";
+import { FileCreatorService } from "./file-creator.service";
 import * as rules from "./rules";
+import { ISyncRule } from "./rules/rule.interface";
 
 export class SyncIndexService {
   private readonly absIgnores: string[];
   private readonly masks: string[];
   private readonly rules: ISyncRule;
+  private readonly fileService = new FileCreatorService();
 
   constructor(
     private baseDir: string,
     private syncExt: string = ".ts",
     ignorePatterns: string[] = [],
     private barrelName: string = "index",
-    private syncSkipFoldersContaining: string[] = [] // <-- ИЗМЕНЕНО
+    private syncSkipFoldersContaining: string[] = [],
   ) {
-    // Выбираем подходящий набор правил или используем TS-правила по умолчанию
     this.rules = rules.ruleRegistry[syncExt.toLowerCase()] || rules.tsRules;
-
     this.baseDir = this.baseDir.replace(/\\/g, "/").replace(/\/+$/, "");
 
     this.absIgnores = ignorePatterns
@@ -52,65 +51,50 @@ export class SyncIndexService {
     let anyChanged = false;
 
     for (const dir of folders) {
-      if (this.isIgnored(dir)) continue; // --- НОВАЯ ЛОГИКА ПРОВЕРКИ ---
+      if (this.isIgnored(dir)) continue;
 
       const folderName = path.basename(dir);
       const shouldSkip = this.syncSkipFoldersContaining.some((marker) =>
-        folderName.includes(marker)
+        folderName.includes(marker),
       );
-      if (shouldSkip) {
-        continue; // Пропускаем эту папку, не создаем в ней index.ts
-      } // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+
+      if (shouldSkip) continue;
+
       try {
         const { folders: sub, files } = await this.collectModules(dir);
+        // Генерируем только содержимое экспортов
         const rawBody = this.rules.generateContent(sub, files, this.syncExt);
-
         const indexFileName = `${this.barrelName}${this.syncExt}`;
-        const idx = path.join(dir, indexFileName);
-        const formattedBody = await this.formatWithPrettier(idx, rawBody);
 
-        const pathComment = getPathCommentLine(idx, workspaceRoot);
-        const finalContent = `${pathComment}\n\n${formattedBody}`;
+        // Делегируем запись и проверку изменений сервису
+        // Он сам добавит заголовок и проверит, нужно ли перезаписывать файл
+        await this.fileService.save(dir, indexFileName, rawBody, workspaceRoot);
 
-        let existingContent: string | null = null;
-        try {
-          existingContent = await fs.readFile(idx, "utf8");
-        } catch {}
-
-        if (existingContent === finalContent) {
-          continue;
-        }
-
-        await this.backupIfExists(idx);
-        await fs.writeFile(idx, finalContent, "utf8");
         anyChanged = true;
-      } catch (err: any) {
-        showWarning(`Не удалось обработать папку "${dir}": ${err.message}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        showWarning(`Не удалось обработать папку "${dir}": ${message}`);
       }
     }
 
-    showInfo(
-      anyChanged
-        ? "Синхронизация index-файлов завершена."
-        : "index-файлы уже актуальны. Изменений не обнаружено."
-    );
+    showInfo("Процесс синхронизации завершен.");
     return true;
   }
 
   private async collectModules(
-    dir: string
+    dir: string,
   ): Promise<{ folders: string[]; files: string[] }> {
     const dirents = await fs.readdir(dir, { withFileTypes: true });
 
     const folders = dirents
       .filter((d) => d.isDirectory() && !this.isIgnored(path.join(dir, d.name)))
       .map((d) => d.name)
-      .sort((a, b) => a.localeCompare(b)); // Делегируем сбор файлов правилам
+      .sort((a, b) => a.localeCompare(b));
 
     const files = this.rules.collectFiles(dirents, this.barrelName);
 
     return { folders, files };
-  } // --- Вспомогательные методы без изменений ---
+  }
 
   public isIgnored(absPath: string): boolean {
     const absNorm = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -131,95 +115,11 @@ export class SyncIndexService {
     return false;
   }
 
-  private async collectAllSubfolders(dir: string): Promise<string[]> {
-    const result: string[] = [];
-    if (this.isIgnored(dir)) return result;
-    result.push(dir);
-    let entries: Dirent[];
-    try {
-      entries = await fs.readdir(dir, { withFileTypes: true });
-    } catch {
-      return result;
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const sub = path.join(dir, entry.name);
-        result.push(...(await this.collectAllSubfolders(sub)));
-      }
-    }
-    return result;
-  }
-
   private globBody(mask: string): string {
     return mask
       .replace(/[.+^${}()|[\]\\]/g, "\\$&")
       .replace(/\*\*/g, "§§DOUBLE§§")
       .replace(/\*/g, "[^/]*")
       .replace(/§§DOUBLE§§/g, ".*");
-  }
-
-  private stripHeader(content: string): string {
-    const lines = content.split("\n");
-    let i = 0;
-    while (i < lines.length && lines[i].trim().startsWith("//")) i++;
-    return lines.slice(i).join("\n").trim();
-  }
-
-  private async backupIfExists(indexPath: string): Promise<void> {
-    try {
-      await fs.access(indexPath);
-    } catch {
-      return;
-    }
-    const now = new Date();
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    const ts =
-      now.getFullYear().toString() +
-      pad(now.getMonth() + 1) +
-      pad(now.getDate()) +
-      "T" +
-      pad(now.getHours()) +
-      pad(now.getMinutes()) +
-      pad(now.getSeconds());
-    await fs.copyFile(indexPath, `${indexPath}.bak.${ts}`);
-  }
-
-  private async formatWithPrettier(
-    filePath: string,
-    content: string
-  ): Promise<string> {
-    let cfg = null;
-    try {
-      cfg = await prettier.resolveConfig(filePath);
-    } catch {}
-    const extension = path.extname(filePath).toLowerCase();
-    let parser: string | undefined;
-    switch (extension) {
-      case ".ts":
-      case ".tsx":
-        parser = "typescript";
-        break;
-      case ".js":
-      case ".jsx":
-        parser = "babel";
-        break;
-      case ".json":
-        parser = "json";
-        break;
-      case ".dart":
-        parser = "dart";
-        break;
-      default:
-        return content;
-    }
-    try {
-      return await prettier.format(content, {
-        ...(cfg || {}),
-        parser,
-        filepath: filePath,
-      });
-    } catch (e) {
-      return content;
-    }
   }
 }
