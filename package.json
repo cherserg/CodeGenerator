@@ -2,7 +2,7 @@
   "name": "code-generator-cherserg",
   "displayName": "CodeGenerator by cherserg",
   "description": "Генерирует код и документацию на основе YAML-шаблонов",
-  "version": "0.1.33",
+  "version": "0.1.34",
   "publisher": "cherserg",
   "engines": {
     "vscode": "^1.65.0"
@@ -42,6 +42,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
+    "build": "vsce package",
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
     "package": "vsce package",

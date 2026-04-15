@@ -37,8 +37,8 @@ export class SyncIndexService {
   }
 
   public async runOnFolders(folders: string[]): Promise<boolean> {
-    const filtered = folders.filter((abs) => !this.isIgnored(abs));
-    return this.syncFolders(filtered);
+    // Убираем предварительную фильтрацию здесь, так как она сработает внутри syncFolders
+    return this.syncFolders(folders);
   }
 
   private async syncFolders(folders: string[]): Promise<boolean> {
@@ -51,9 +51,12 @@ export class SyncIndexService {
     let anyChanged = false;
 
     for (const dir of folders) {
-      if (this.isIgnored(dir)) continue;
+      // Приводим путь к единому формату для проверки
+      const normalizedDir = dir.replace(/\\/g, "/").replace(/\/+$/, "");
 
-      const folderName = path.basename(dir);
+      if (this.isIgnored(normalizedDir)) continue;
+
+      const folderName = path.basename(normalizedDir);
       const shouldSkip = this.syncSkipFoldersContaining.some((marker) =>
         folderName.includes(marker),
       );
@@ -61,23 +64,29 @@ export class SyncIndexService {
       if (shouldSkip) continue;
 
       try {
-        const { folders: sub, files } = await this.collectModules(dir);
-        // Генерируем только содержимое экспортов
+        const { folders: sub, files } =
+          await this.collectModules(normalizedDir);
         const rawBody = this.rules.generateContent(sub, files, this.syncExt);
         const indexFileName = `${this.barrelName}${this.syncExt}`;
 
-        // Делегируем запись и проверку изменений сервису
-        // Он сам добавит заголовок и проверит, нужно ли перезаписывать файл
-        await this.fileService.save(dir, indexFileName, rawBody, workspaceRoot);
-
+        await this.fileService.save(
+          normalizedDir,
+          indexFileName,
+          rawBody,
+          workspaceRoot,
+        );
         anyChanged = true;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        showWarning(`Не удалось обработать папку "${dir}": ${message}`);
+        showWarning(
+          `Не удалось обработать папку "${normalizedDir}": ${message}`,
+        );
       }
     }
 
-    showInfo("Процесс синхронизации завершен.");
+    if (anyChanged) {
+      showInfo("Процесс синхронизации завершен.");
+    }
     return true;
   }
 
@@ -87,7 +96,11 @@ export class SyncIndexService {
     const dirents = await fs.readdir(dir, { withFileTypes: true });
 
     const folders = dirents
-      .filter((d) => d.isDirectory() && !this.isIgnored(path.join(dir, d.name)))
+      .filter((d) => {
+        if (!d.isDirectory()) return false;
+        const fullPath = path.join(dir, d.name).replace(/\\/g, "/");
+        return !this.isIgnored(fullPath);
+      })
       .map((d) => d.name)
       .sort((a, b) => a.localeCompare(b));
 
@@ -98,28 +111,34 @@ export class SyncIndexService {
 
   public isIgnored(absPath: string): boolean {
     const absNorm = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
+
+    // 1. Проверка по абсолютным путям
     for (const ig of this.absIgnores) {
       if (absNorm === ig || absNorm.startsWith(ig + "/")) return true;
     }
+
+    // 2. Проверка по маскам относительно baseDir
     const rel = path
       .relative(this.baseDir, absNorm)
       .replace(/\\/g, "/")
       .replace(/\/+$/, "");
-    if (!rel) return false;
+
+    // Если путь выше baseDir, не игнорируем его по относительным маскам
+    if (rel.startsWith("..")) return false;
+
     for (const mask of this.masks) {
       const body = this.globBody(mask);
-      if (new RegExp(`^${body}$`).test(rel)) return true;
-      if (new RegExp(`${body}$`).test(absNorm)) return true;
-      if (new RegExp(`(^|/)${body}(/|$)`).test(absNorm)) return true;
+      const regex = new RegExp(`(^|/)${body}(/|$)`);
+      if (regex.test(rel) || regex.test(absNorm)) return true;
     }
+
     return false;
   }
 
   private globBody(mask: string): string {
     return mask
       .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-      .replace(/\*\*/g, "§§DOUBLE§§")
-      .replace(/\*/g, "[^/]*")
-      .replace(/§§DOUBLE§§/g, ".*");
+      .replace(/\*\*/g, ".*")
+      .replace(/\*/g, "[^/]*");
   }
 }
