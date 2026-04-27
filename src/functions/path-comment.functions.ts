@@ -1,3 +1,5 @@
+// src/functions/path-comment.functions.ts
+
 import * as path from "path";
 import * as vscode from "vscode";
 
@@ -26,23 +28,29 @@ export function prepareSaveCommentsEdits(
   let firstCodeLineIndex = 0;
   let foundCode = false;
 
-  // Список префиксов, которые мы считаем "техническими комментариями" пути
+  // Базовые префиксы для обратной совместимости
   const pathPrefixes = ["// src/", "// packages/", "// Path:"];
 
   for (let i = 0; i < lines.length; i++) {
     const trimmedLine = lines[i].trim();
 
-    // Пропускаем пустые строки
+    // 1. Пропускаем пустые строки
     if (trimmedLine === "") {
       continue;
     }
 
-    // Проверяем: это строка из конфига patterns ИЛИ это технический комментарий пути?
+    // 2. Проверяем, является ли строка известным паттерном удаления
     const isRemovablePattern = patterns.some((p) => trimmedLine.startsWith(p));
+
+    // 3. Проверяем, является ли строка техническим комментарием пути
     const isPathComment = pathPrefixes.some((p) => trimmedLine.startsWith(p));
 
-    if (isRemovablePattern || isPathComment) {
-      // Это всё еще часть заголовка, продолжаем цикл
+    // 4. НОВОЕ: Проверяем, не является ли строка ТЕКУЩИМ комментарием пути (даже если префикса нет в списке)
+    // Это предотвратит дублирование, если путь начинается, например, с "// scripts/"
+    const isCurrentPath = trimmedLine === correctPathLine;
+
+    if (isRemovablePattern || isPathComment || isCurrentPath) {
+      // Это всё еще часть заголовка, продолжаем поиск
       continue;
     } else {
       // Нашли первую строку настоящего кода
@@ -52,16 +60,14 @@ export function prepareSaveCommentsEdits(
     }
   }
 
-  // Если весь файл состоит из комментариев или пуст
   if (!foundCode) {
     firstCodeLineIndex = doc.lineCount;
   }
 
-  // Определяем диапазон заголовка (от начала до первой строки кода)
   const headerRange = new vscode.Range(0, 0, firstCodeLineIndex, 0);
   const existingHeaderText = doc.getText(headerRange);
 
-  // Сравниваем контент (без учета пробелов и пустых строк), чтобы не дергать файл зря
+  // Нормализуем для сравнения
   const normalizedExisting = existingHeaderText.replace(/\s/g, "");
   const normalizedCorrect = correctPathLine.replace(/\s/g, "");
 
@@ -69,7 +75,6 @@ export function prepareSaveCommentsEdits(
     return [];
   }
 
-  // Заменяем ВЕСЬ найденный блок заголовка на одну актуальную строку пути
   const newHeaderText = `${correctPathLine}\n\n`;
   return [vscode.TextEdit.replace(headerRange, newHeaderText)];
 }
