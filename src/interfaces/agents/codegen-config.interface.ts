@@ -55,6 +55,18 @@ export const CodegenConfigSchema = z.object({
        * Например: "default" или "camelCase".
        */
       strategy: z.string().default("default"),
+      /**
+       * Дополнительные опции для стратегии именования.
+       */
+      opts: z
+        .object({
+          /**
+           * Разделитель для разбиения сегментов пути.
+           * Может быть строкой (регуляркой) или массивом символов.
+           */
+          separator: z.union([z.string(), z.array(z.string())]).optional(),
+        })
+        .default({}),
     }),
     ignore: z.object({
       /**

@@ -41,10 +41,11 @@ class TypeScriptRules implements ISyncRule {
 
     const isWithAs = config.barrel.naming.mode === "withAs";
     const strategy = getNamingStrategy(config.barrel.naming.strategy);
+    const namingOpts = config.barrel.naming.opts;
 
     const folderExports = folders.map((f) => {
       if (isWithAs) {
-        const alias = strategy(f);
+        const alias = strategy(f, namingOpts);
         return `export * as ${alias} from './${f}';`;
       }
       return `export * from './${f}';`;
@@ -52,7 +53,7 @@ class TypeScriptRules implements ISyncRule {
 
     const fileExports = files.map((f) => {
       if (isWithAs) {
-        const alias = strategy(f);
+        const alias = strategy(f, namingOpts);
         return `export * as ${alias} from './${f}';`;
       }
       return `export * from './${f}';`;
