@@ -1,6 +1,8 @@
 // src/services/rules/typescript.rules.ts
 
 import { Dirent } from "fs";
+import { ICodegenConfig } from "../../interfaces/agents/codegen-config.interface";
+import { getNamingStrategy } from "./naming-strategy.registry";
 import { ISyncRule } from "./rule.interface";
 
 class TypeScriptRules implements ISyncRule {
@@ -27,13 +29,35 @@ class TypeScriptRules implements ISyncRule {
       .sort((a, b) => a.localeCompare(b));
   }
 
-  generateContent(folders: string[], files: string[], syncExt: string): string {
+  generateContent(
+    folders: string[],
+    files: string[],
+    syncExt: string,
+    config: ICodegenConfig,
+  ): string {
     if (folders.length === 0 && files.length === 0) {
-      // Для пустых папок генерируем экспорт всего из текущей директории
       return `export * from './';\n`;
     }
-    const folderExports = folders.map((f) => `export * from './${f}';`);
-    const fileExports = files.map((f) => `export * from './${f}';`);
+
+    const isWithAs = config.barrel.naming.mode === "withAs";
+    const strategy = getNamingStrategy(config.barrel.naming.strategy);
+
+    const folderExports = folders.map((f) => {
+      if (isWithAs) {
+        const alias = strategy(f);
+        return `export * as ${alias} from './${f}';`;
+      }
+      return `export * from './${f}';`;
+    });
+
+    const fileExports = files.map((f) => {
+      if (isWithAs) {
+        const alias = strategy(f);
+        return `export * as ${alias} from './${f}';`;
+      }
+      return `export * from './${f}';`;
+    });
+
     return [...folderExports, ...fileExports, ""].join("\n");
   }
 }

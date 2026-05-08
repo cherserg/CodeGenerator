@@ -1,0 +1,24 @@
+// src/configs/codegen.default.config.ts
+
+import { ICodegenConfig } from "../interfaces";
+
+export const DEFAULT_CONFIG: ICodegenConfig = {
+  configFolder: "codegen",
+  output: {
+    path: "src/generated",
+    extention: ".ts",
+    pathOrder: ["entity", "script"],
+    nameOrder: ["entity", "script", "template"],
+  },
+  barrel: {
+    name: "index",
+    naming: { mode: "withoutAs", strategy: "default" },
+    ignore: { path: [], foldersName: [] },
+    extention: ".ts",
+    // path берется из output.path по умолчанию в функции чтения
+  },
+  comment: {
+    extentions: [".ts", ".tsx", ".dart"],
+    removalPatterns: ["// Path:", "// src/", "// packages/", "// Этот файл"],
+  },
+};

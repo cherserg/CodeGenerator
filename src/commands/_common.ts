@@ -6,7 +6,7 @@ export function registerCommand(
   context: vscode.ExtensionContext,
   command: string,
   run: () => Promise<void>,
-  onError: (err: any) => void
+  onError: (err: unknown) => void,
 ) {
   const d = vscode.commands.registerCommand(command, async () => {
     try {

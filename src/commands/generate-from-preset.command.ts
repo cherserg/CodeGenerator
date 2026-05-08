@@ -1,40 +1,41 @@
-// src/commands/generateFromPreset.ts
+// src/commands/generate-from-preset.command.ts
+
 import * as path from "path";
-import { registerCommand } from "./_common";
+import * as vscode from "vscode";
 import {
   pickEntitiesWithPresets,
   pickPresetKeys,
-  pickProject, // <-- Добавлено
+  pickProject,
 } from "../functions/pick.functions";
-import { TemplateRepository } from "../repositories/template.repository";
-import { TemplatePartRepository } from "../repositories/template-part.repository";
-import { ScriptRepository } from "../repositories/script.repository";
-import { EntityRepository } from "../repositories/entity.repository";
-import { PresetRepository } from "../repositories/preset.repository";
-import { RepositoryLoader } from "../loaders/repository.loader";
-import { TemplateManager } from "../managers/template.manager";
-import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
-import { IEntity } from "../interfaces/entities/entity.interface";
-import { IScript } from "../interfaces/entities/script.interface";
-import { IPreset } from "../interfaces/entities/preset.interface";
+import { findProjectsInWorkspace } from "../functions/project-discovery.functions";
+import { readCodegenConfig } from "../functions/read-config.functions";
+import { isTemplateApplicable } from "../functions/template-applicability.functions";
 import {
   getWorkspaceRoot,
   showError,
   showInfo,
   showWarning,
 } from "../functions/vscode.functions";
-import { readCodegenConfig } from "../functions/read-config.functions";
-import { isTemplateApplicable } from "../functions/template-applicability.functions";
-import { findProjectsInWorkspace } from "../functions/project-discovery.functions"; // <-- Добавлено
+import { IEntity } from "../interfaces/entities/entity.interface";
+import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
+import { IPreset } from "../interfaces/entities/preset.interface";
+import { IScript } from "../interfaces/entities/script.interface";
+import { RepositoryLoader } from "../loaders/repository.loader";
+import { TemplateManager } from "../managers/template.manager";
+import { EntityRepository } from "../repositories/entity.repository";
+import { PresetRepository } from "../repositories/preset.repository";
+import { ScriptRepository } from "../repositories/script.repository";
+import { TemplatePartRepository } from "../repositories/template-part.repository";
+import { TemplateRepository } from "../repositories/template.repository";
+import { registerCommand } from "./_common";
 
-export function registerGenerateFromPresetCommand(context: any) {
+export function registerGenerateFromPresetCommand(context: unknown) {
   registerCommand(
-    context,
+    context as vscode.ExtensionContext,
     "codegenerator.generateFromPreset",
     async () => {
       const workspaceRoot = getWorkspaceRoot();
 
-      // ШАГ 1 и 2: Находим и выбираем проект
       const projects = await findProjectsInWorkspace(workspaceRoot);
       if (projects.length === 0) {
         showWarning("Не найдено ни одного проекта с файлом codegen.json.");
@@ -43,7 +44,7 @@ export function registerGenerateFromPresetCommand(context: any) {
 
       const selectedProject = await pickProject(
         projects,
-        "Выберите проект для генерации из пресета"
+        "Выберите проект для генерации из пресета",
       );
 
       if (!selectedProject) {
@@ -53,13 +54,14 @@ export function registerGenerateFromPresetCommand(context: any) {
 
       const projectRoot = selectedProject.path;
 
-      // Используем projectRoot для всех последующих операций
       const {
         configFolder,
-        outputPath: globalOutputPath,
-        outputExt,
-        pathOrder: globalPathOrder,
-        nameOrder: globalNameOrder,
+        output: {
+          path: globalOutputPath,
+          extention: globalOutputExtention,
+          pathOrder: globalPathOrder,
+          nameOrder: globalNameOrder,
+        },
       } = await readCodegenConfig(projectRoot);
       const baseDir = path.join(projectRoot, configFolder);
 
@@ -74,22 +76,21 @@ export function registerGenerateFromPresetCommand(context: any) {
         partRepo,
         scriptsRepo,
         entitiesRepo,
-        presetsRepo
+        presetsRepo,
       ).loadAll(baseDir);
 
-      /* ---------- выбор сущностей с пресетами ---------- */
       const entitiesWithPresets: IEntity[] = entitiesRepo
         .getAll()
         .filter(
-          (ent: IEntity) => Array.isArray(ent.presets) && ent.presets.length > 0
+          (ent: IEntity) =>
+            Array.isArray(ent.presets) && ent.presets.length > 0,
         );
 
       const entityObjs = await pickEntitiesWithPresets(
         entitiesWithPresets,
-        "Выберите одну или несколько сущностей"
+        "Выберите одну или несколько сущностей",
       );
 
-      /* ---------- объединяем все пресеты выбранных сущностей ---------- */
       const uniquePresetLabels: string[] = Array.from(
         new Set(
           entityObjs.reduce<string[]>((acc, ent: IEntity) => {
@@ -97,8 +98,8 @@ export function registerGenerateFromPresetCommand(context: any) {
               acc.push(...ent.presets);
             }
             return acc;
-          }, [])
-        )
+          }, []),
+        ),
       );
 
       if (uniquePresetLabels.length === 0) {
@@ -106,10 +107,9 @@ export function registerGenerateFromPresetCommand(context: any) {
         return;
       }
 
-      /* ---------- выбор пресетов ---------- */
       const selectedPresetKeys = await pickPresetKeys(
         uniquePresetLabels,
-        "Выберите пресеты"
+        "Выберите пресеты",
       );
 
       const presetObjs: IPreset[] = selectedPresetKeys
@@ -121,7 +121,6 @@ export function registerGenerateFromPresetCommand(context: any) {
         return;
       }
 
-      /* ---------- генерация ---------- */
       const manager = new TemplateManager(partRepo);
       const allTemplates = tplRepo.getAll();
 
@@ -135,25 +134,25 @@ export function registerGenerateFromPresetCommand(context: any) {
 
           if (!scriptObjs.length) {
             showWarning(
-              `Ни одного доступного скрипта для пресета «${presetObj.key}» не найдено.`
+              `Ни одного доступного скрипта для пресета «${presetObj.key}» не найдено.`,
             );
             continue;
           }
 
           const templates = allTemplates.filter((tpl) =>
-            scriptObjs.some((s) => isTemplateApplicable(tpl, s, entityObj))
+            scriptObjs.some((s) => isTemplateApplicable(tpl, s, entityObj)),
           );
 
           if (!templates.length) {
             showWarning(
-              `Не найдено шаблонов, подходящих под пресет «${presetObj.key}» и сущность «${entityObj.name}».`
+              `Не найдено шаблонов, подходящих под пресет «${presetObj.key}» и сущность «${entityObj.name}».`,
             );
             continue;
           }
 
           for (const scr of scriptObjs) {
             const applicableTemplates = templates.filter((tpl) =>
-              isTemplateApplicable(tpl, scr, entityObj)
+              isTemplateApplicable(tpl, scr, entityObj),
             );
 
             for (const tpl of applicableTemplates) {
@@ -161,7 +160,7 @@ export function registerGenerateFromPresetCommand(context: any) {
                 outputPath: tpl.outputPath
                   ? path.join(projectRoot, tpl.outputPath)
                   : path.join(projectRoot, globalOutputPath),
-                outputExt,
+                outputExt: globalOutputExtention,
                 pathOrder: tpl.pathOrder ?? globalPathOrder,
                 nameOrder: tpl.nameOrder ?? globalNameOrder,
               };
@@ -182,9 +181,12 @@ export function registerGenerateFromPresetCommand(context: any) {
       showInfo(
         `Генерация завершена для сущностей «${entityObjs
           .map((e) => e.name)
-          .join(", ")}» по выбранным пресетам.`
+          .join(", ")}» по выбранным пресетам.`,
       );
     },
-    (err) => showError(`Ошибка: ${err.message}`)
+    (err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Ошибка: ${message}`);
+    },
   );
 }

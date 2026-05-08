@@ -1,21 +1,21 @@
 // src/services/rules/rule.interface.ts
 
 import { Dirent } from "fs";
+import { ICodegenConfig } from "../../interfaces/agents/codegen-config.interface";
 
 export interface ISyncRule {
   /**
    * Фильтрует список файлов в директории и возвращает имена модулей для экспорта.
-   * @param dirents Список файлов и папок в директории.
-   * @param barrelName Имя индексного файла без расширения, который нужно проигнорировать (например, 'index').
-   * @returns Массив имен файлов без расширения.
    */
-  collectFiles(dirents: Dirent[], barrelName: string): string[] /**
-   * Генерирует содержимое barrel-файла на основе списка модулей.
-   * @param folders Список подпапок для экспорта.
-   * @param files Список файлов для экспорта (без расширения).
-   * @param syncExt Текущее расширение файла (например, '.dart').
-   * @returns Строка с содержимым для записи в index-файл.
-   */;
+  collectFiles(dirents: Dirent[], barrelName: string): string[];
 
-  generateContent(folders: string[], files: string[], syncExt: string): string;
+  /**
+   * Генерирует содержимое barrel-файла на основе списка модулей и настроек.
+   */
+  generateContent(
+    folders: string[],
+    files: string[],
+    syncExt: string,
+    config: ICodegenConfig,
+  ): string;
 }

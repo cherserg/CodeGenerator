@@ -15,9 +15,9 @@ import {
 import { SyncIndexService } from "../services/sync-index.service";
 import { registerCommand } from "./_common";
 
-export function registerSyncBarrelFilesCommand(context: any) {
+export function registerSyncBarrelFilesCommand(context: unknown) {
   registerCommand(
-    context,
+    context as vscode.ExtensionContext,
     "codegenerator.syncIndex",
     async () => {
       const workspaceRoot = getWorkspaceRoot();
@@ -41,13 +41,12 @@ export function registerSyncBarrelFilesCommand(context: any) {
       const projectRoot = selectedProject.path;
       const cfg = await readCodegenConfig(projectRoot);
 
-      if (!cfg.syncIndexPath) {
-        showError('Параметр "syncIndexPath" не указан в codegen.json.');
+      if (!cfg.barrel.path) {
+        showError('Параметр "path" не указан в блоке "barrel" конфига.');
         return;
       }
 
-      // baseDir — это точка отсчета для показа списка в QuickPick
-      const baseDir = path.resolve(projectRoot, cfg.syncIndexPath);
+      const baseDir = path.resolve(projectRoot, cfg.barrel.path);
 
       try {
         const stat = await fs.stat(baseDir);
@@ -55,12 +54,12 @@ export function registerSyncBarrelFilesCommand(context: any) {
           showError(`Путь "${baseDir}" не является директорией.`);
           return;
         }
-      } catch (e: any) {
-        showError(`Папка "${baseDir}" не найдена: ${e.message}`);
+      } catch (e: unknown) {
+        const errMessage = e instanceof Error ? e.message : String(e);
+        showError(`Папка "${baseDir}" не найдена: ${errMessage}`);
         return;
       }
 
-      // Рекурсивный сбор всех папок
       async function collectAllSubfolders(
         dir: string,
         prefix = "",
@@ -91,28 +90,28 @@ export function registerSyncBarrelFilesCommand(context: any) {
           showWarning(`В папке "${baseDir}" нет вложенных подпапок.`);
           return;
         }
-      } catch (err: any) {
-        showError(`Не удалось собрать список подпапок: ${err.message}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        showError(`Не удалось собрать список подпапок: ${message}`);
         return;
       }
 
-      const ignoreList: string[] = Array.isArray(cfg.ignoreSync)
-        ? cfg.ignoreSync
+      const ignoreList: string[] = Array.isArray(cfg.barrel.ignore.path)
+        ? cfg.barrel.ignore.path
         : [];
       const absIgnorePatterns = ignoreList.map((p) =>
         path.resolve(projectRoot, p),
       );
 
-      // Создаем временный сервис только для фильтрации списка в QuickPick
       const filterSvc = new SyncIndexService(
         baseDir,
-        cfg.syncIndexExt,
+        cfg,
+        cfg.barrel.extention,
         absIgnorePatterns,
-        cfg.barrelName,
-        cfg.syncSkipFoldersContaining,
+        cfg.barrel.name,
+        cfg.barrel.ignore.foldersName,
       );
 
-      // Оставляем только те папки, которые не в игноре
       const visibleFoldersRel = allFoldersRel.filter(
         (rel) => !filterSvc.isIgnored(path.join(baseDir, rel)),
       );
@@ -123,10 +122,17 @@ export function registerSyncBarrelFilesCommand(context: any) {
           const indent = "  ".repeat(depth);
           return {
             label: `${indent}└ ${path.basename(rel)}`,
-            description: rel, // храним относительный путь здесь
+            description: rel,
           };
         })
-        .sort((a, b) => a.description!.localeCompare(b.description!));
+        .sort((a, b) => {
+          const descA = a.description;
+          const descB = b.description;
+          if (descA && descB) {
+            return descA.localeCompare(descB);
+          }
+          return 0;
+        });
 
       const picked = await vscode.window.showQuickPick(items, {
         canPickMany: true,
@@ -138,10 +144,12 @@ export function registerSyncBarrelFilesCommand(context: any) {
         return;
       }
 
-      // --- ЛОГИКА ВЫБОРА ИСПРАВЛЕНА ЗДЕСЬ ---
+      const chosenRels = new Set(
+        picked
+          .map((i) => i.description)
+          .filter((desc): desc is string => Boolean(desc)),
+      );
 
-      // Нам нужно синхронизировать выбранные папки И все их вложенные папки
-      const chosenRels = new Set(picked.map((i) => i.description!));
       const finalFoldersToSyncAbs = allFoldersRel
         .filter((rel) => {
           return Array.from(chosenRels).some(
@@ -150,16 +158,19 @@ export function registerSyncBarrelFilesCommand(context: any) {
         })
         .map((rel) => path.join(baseDir, rel));
 
-      // Запускаем основной процесс
       try {
         const ok = await filterSvc.runOnFolders(finalFoldersToSyncAbs);
         if (!ok) {
           showError("Синхронизация завершилась с ошибкой.");
         }
-      } catch (err: any) {
-        showError(`Ошибка синхронизации: ${err.message}`);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        showError(`Ошибка синхронизации: ${message}`);
       }
     },
-    (err) => showError(`Ошибка: ${err.message}`),
+    (err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Ошибка: ${message}`);
+    },
   );
 }

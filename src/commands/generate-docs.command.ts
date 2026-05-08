@@ -1,31 +1,33 @@
+// src/commands/generate-docs.command.ts
+
 import * as vscode from "vscode";
-import { registerCommand } from "./_common";
-import { TemplateRepository } from "../repositories/template.repository";
-import { TemplatePartRepository } from "../repositories/template-part.repository";
-import { ScriptRepository } from "../repositories/script.repository";
-import { EntityRepository } from "../repositories/entity.repository";
-import { PresetRepository } from "../repositories/preset.repository";
+import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
 import { RepositoryLoader } from "../loaders/repository.loader";
 import { TemplateManager } from "../managers/template.manager";
-import { IGenerationRequest } from "../interfaces/entities/gen-request.interface";
+import { EntityRepository } from "../repositories/entity.repository";
+import { PresetRepository } from "../repositories/preset.repository";
+import { ScriptRepository } from "../repositories/script.repository";
+import { TemplatePartRepository } from "../repositories/template-part.repository";
+import { TemplateRepository } from "../repositories/template.repository";
+import { registerCommand } from "./_common";
 
+import {
+  pickEntities,
+  pickProject,
+  pickScripts,
+  pickTemplates,
+} from "../functions/pick.functions";
+import { findProjectsInWorkspace } from "../functions/project-discovery.functions";
 import { readCodegenConfig } from "../functions/read-config.functions";
+import { isTemplateApplicable } from "../functions/template-applicability.functions";
 import {
   getWorkspaceRoot,
-  showInfo,
   showError,
+  showInfo,
   showWarning,
 } from "../functions/vscode.functions";
-import {
-  pickScripts,
-  pickEntities,
-  pickTemplates,
-  pickProject,
-} from "../functions/pick.functions";
-import { isTemplateApplicable } from "../functions/template-applicability.functions";
-import { findProjectsInWorkspace } from "../functions/project-discovery.functions";
 
-export function registerGenerateDocsCommand(context: any) {
+export function registerGenerateDocsCommand(context: vscode.ExtensionContext) {
   registerCommand(
     context,
     "codegenerator.generateDocs",
@@ -40,7 +42,7 @@ export function registerGenerateDocsCommand(context: any) {
 
       const selectedProject = await pickProject(
         projects,
-        "Выберите проект для генерации документации"
+        "Выберите проект для генерации документации",
       );
 
       if (!selectedProject) {
@@ -52,10 +54,12 @@ export function registerGenerateDocsCommand(context: any) {
 
       const {
         configFolder,
-        outputPath: globalOutputPath,
-        outputExt,
-        pathOrder: globalPathOrder,
-        nameOrder: globalNameOrder,
+        output: {
+          path: globalOutputPath,
+          extention: globalOutputExtention,
+          pathOrder: globalPathOrder,
+          nameOrder: globalNameOrder,
+        },
       } = await readCodegenConfig(projectRoot);
       const baseDir = `${projectRoot}/${configFolder}`;
 
@@ -70,49 +74,44 @@ export function registerGenerateDocsCommand(context: any) {
         partRepo,
         scriptsRepo,
         entitiesRepo,
-        presetsRepo
+        presetsRepo,
       ).loadAll(baseDir);
 
-      /* ---------- сначала выбираем сущности ---------- */
       const entities = await pickEntities(
         entitiesRepo.getAll(),
-        "Выберите сущности (или пункт «Без сущности»)"
+        "Выберите сущности (или пункт «Без сущности»)",
       );
 
-      /* ---------- оставляем только скрипты, у которых есть подходящие шаблоны ---------- */
       const allTemplates = tplRepo.getAll();
       const scriptsWithTemplates = scriptsRepo
         .getAll()
         .filter((scr) =>
           allTemplates.some((tpl) =>
-            entities.some((ent) => isTemplateApplicable(tpl, scr, ent))
-          )
+            entities.some((ent) => isTemplateApplicable(tpl, scr, ent)),
+          ),
         );
 
       if (!scriptsWithTemplates.length) {
         showWarning(
-          "Под выбранные сущности не найдено ни одного скрипта с шаблонами."
+          "Под выбранные сущности не найдено ни одного скрипта с шаблонами.",
         );
         return;
       }
 
-      /* ---------- теперь выбор скриптов ---------- */
       const scripts = await pickScripts(
         scriptsWithTemplates,
-        "Выберите скрипты"
+        "Выберите скрипты",
       );
 
-      /* ---------- и, наконец, выбор шаблонов ---------- */
       const templates = await pickTemplates(
         allTemplates,
         scripts,
         entities,
-        "Выберите шаблоны для генерации"
+        "Выберите шаблоны для генерации",
       );
 
       const manager = new TemplateManager(partRepo);
 
-      // Определяем системные переменные, которые не нужно запрашивать у пользователя
       const SYSTEM_VARIABLES = new Set([
         "entityName",
         "entitySmallName",
@@ -130,7 +129,7 @@ export function registerGenerateDocsCommand(context: any) {
           : `${projectRoot}/${globalOutputPath}`;
         const outputConfig = {
           outputPath: effectiveOutputPath,
-          outputExt,
+          outputExt: globalOutputExtention,
           pathOrder: tpl.pathOrder ?? globalPathOrder,
           nameOrder: tpl.nameOrder ?? globalNameOrder,
         };
@@ -139,14 +138,13 @@ export function registerGenerateDocsCommand(context: any) {
           for (const ent of entities) {
             if (!isTemplateApplicable(tpl, scr, ent)) continue;
 
-            // --- НОВАЯ ЛОГИКА: Обнаружение и запрос динамических переменных ---
             const userVariables: Record<string, string> = {};
             const placeholders = new Set<string>();
             const combinedTemplateString = `${tpl.content} ${
               tpl.pathName ?? ""
             }`;
             const placeholderRegex = /{{\s*(\w+)\s*}}/g;
-            let match;
+            let match: RegExpExecArray | null;
 
             while (
               (match = placeholderRegex.exec(combinedTemplateString)) !== null
@@ -155,7 +153,7 @@ export function registerGenerateDocsCommand(context: any) {
             }
 
             const dynamicVariables = [...placeholders].filter(
-              (p) => !SYSTEM_VARIABLES.has(p)
+              (p) => !SYSTEM_VARIABLES.has(p),
             );
 
             let wasCancelled = false;
@@ -171,7 +169,6 @@ export function registerGenerateDocsCommand(context: any) {
               });
 
               if (value === undefined) {
-                // Пользователь отменил ввод
                 wasCancelled = true;
                 break;
               }
@@ -180,17 +177,15 @@ export function registerGenerateDocsCommand(context: any) {
 
             if (wasCancelled) {
               showWarning("Генерация отменена.");
-              // Прерываем только текущую итерацию, чтобы не отменять всю генерацию
               continue;
             }
-            // --- КОНЕЦ НОВОЙ ЛОГИКИ ---
 
             const req: IGenerationRequest = {
               template: tpl,
               script: scr,
               entity: ent,
               output: outputConfig,
-              userVariables, // Передаем собранные переменные
+              userVariables,
             };
             await manager.generate(req, workspaceRoot);
           }
@@ -198,6 +193,9 @@ export function registerGenerateDocsCommand(context: any) {
       }
       showInfo("Генерация завершена");
     },
-    (err) => showError(`Ошибка: ${err.message}`)
+    (err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Ошибка: ${message}`);
+    },
   );
 }

@@ -7,6 +7,7 @@ import {
   showInfo,
   showWarning,
 } from "../functions/vscode.functions";
+import { ICodegenConfig } from "../interfaces/agents/codegen-config.interface";
 import { FileCreatorService } from "./file-creator.service";
 import * as rules from "./rules";
 import { ISyncRule } from "./rules/rule.interface";
@@ -19,10 +20,11 @@ export class SyncIndexService {
 
   constructor(
     private baseDir: string,
+    private config: ICodegenConfig,
     private syncExt: string = ".ts",
     ignorePatterns: string[] = [],
     private barrelName: string = "index",
-    private syncSkipFoldersContaining: string[] = [],
+    private ignoreFoldersName: string[] = [],
   ) {
     this.rules = rules.ruleRegistry[syncExt.toLowerCase()] || rules.tsRules;
     this.baseDir = this.baseDir.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -37,7 +39,6 @@ export class SyncIndexService {
   }
 
   public async runOnFolders(folders: string[]): Promise<boolean> {
-    // Убираем предварительную фильтрацию здесь, так как она сработает внутри syncFolders
     return this.syncFolders(folders);
   }
 
@@ -51,13 +52,12 @@ export class SyncIndexService {
     let anyChanged = false;
 
     for (const dir of folders) {
-      // Приводим путь к единому формату для проверки
       const normalizedDir = dir.replace(/\\/g, "/").replace(/\/+$/, "");
 
       if (this.isIgnored(normalizedDir)) continue;
 
       const folderName = path.basename(normalizedDir);
-      const shouldSkip = this.syncSkipFoldersContaining.some((marker) =>
+      const shouldSkip = this.ignoreFoldersName.some((marker) =>
         folderName.includes(marker),
       );
 
@@ -66,7 +66,13 @@ export class SyncIndexService {
       try {
         const { folders: sub, files } =
           await this.collectModules(normalizedDir);
-        const rawBody = this.rules.generateContent(sub, files, this.syncExt);
+        // Прокидываем конфигурацию в правила для применения barrelMode
+        const rawBody = this.rules.generateContent(
+          sub,
+          files,
+          this.syncExt,
+          this.config,
+        );
         const indexFileName = `${this.barrelName}${this.syncExt}`;
 
         await this.fileService.save(
@@ -112,18 +118,15 @@ export class SyncIndexService {
   public isIgnored(absPath: string): boolean {
     const absNorm = absPath.replace(/\\/g, "/").replace(/\/+$/, "");
 
-    // 1. Проверка по абсолютным путям
     for (const ig of this.absIgnores) {
       if (absNorm === ig || absNorm.startsWith(ig + "/")) return true;
     }
 
-    // 2. Проверка по маскам относительно baseDir
     const rel = path
       .relative(this.baseDir, absNorm)
       .replace(/\\/g, "/")
       .replace(/\/+$/, "");
 
-    // Если путь выше baseDir, не игнорируем его по относительным маскам
     if (rel.startsWith("..")) return false;
 
     for (const mask of this.masks) {

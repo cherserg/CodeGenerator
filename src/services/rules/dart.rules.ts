@@ -1,6 +1,7 @@
 // src/services/rules/dart.rules.ts
 
 import { Dirent } from "fs";
+import { ICodegenConfig } from "../../interfaces/agents/codegen-config.interface";
 import { ISyncRule } from "./rule.interface";
 
 class DartRules implements ISyncRule {
@@ -19,15 +20,19 @@ class DartRules implements ISyncRule {
 
         return isDartFile && !isIndexFile && !isPartFile;
       })
-      .map((d) => d.name.slice(0, -5)) // .dart = 5 символов
+      .map((d) => d.name.slice(0, -5))
       .sort((a, b) => a.localeCompare(b));
   }
 
-  generateContent(folders: string[], files: string[], syncExt: string): string {
+  generateContent(
+    folders: string[],
+    files: string[],
+    syncExt: string,
+    config: ICodegenConfig,
+  ): string {
     if (folders.length === 0 && files.length === 0) {
-      // Для Dart нет аналога "export * from './'", поэтому создаем пустой файл с комментарием.
       return `// Barrel file, no exports yet.\n`;
-    } // Для Dart предполагаем, что вложенные папки также содержат index.dart
+    }
     const folderExports = folders.map((f) => `export '${f}/index.dart';`);
     const fileExports = files.map((f) => `export '${f}${syncExt}';`);
     return [...folderExports, ...fileExports, ""].join("\n");

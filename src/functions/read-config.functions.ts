@@ -1,58 +1,42 @@
+// src/functions/read-config.functions.ts
+
 import * as fs from "fs/promises";
 import * as path from "path";
-import { DEFAULT_CONFIG } from "../configs";
-import { ICodegenConfig } from "../interfaces";
+import {
+  CodegenConfigSchema,
+  ICodegenConfig,
+} from "../interfaces/agents/codegen-config.interface";
 
 export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
   const cfgPath = path.join(root, "codegen.json");
-  let cfgRaw: Partial<ICodegenConfig> = {};
 
   try {
     const raw = await fs.readFile(cfgPath, "utf8");
-    cfgRaw = JSON.parse(raw);
-  } catch (error: any) {
-    console.error(
-      `❌ Failed to read or parse codegen.json. Falling back to default config.`,
-      {
-        path: cfgPath,
-        error: error.message,
-      },
-    );
+    const json = JSON.parse(raw);
+
+    const result = CodegenConfigSchema.safeParse(json);
+
+    if (!result.success) {
+      const errors = result.error.issues
+        .map((issue) => `[${issue.path.join(".")}] ${issue.message}`)
+        .join("\n");
+
+      throw new Error(`Ошибка в структуре codegen.json:\n${errors}`);
+    }
+
+    const config = result.data;
+
+    if (!config.barrel.path) {
+      config.barrel.path = config.output.path;
+    }
+
+    return config;
+  } catch (error: unknown) {
+    const errMessage = error instanceof Error ? error.message : String(error);
+
+    console.error(`❌ Ошибка чтения конфигурации: ${errMessage}`);
+
+    // Возвращаем дефолты через parse({}), так как схема сама их подставит
+    return CodegenConfigSchema.parse({});
   }
-
-  const outputPath = cfgRaw.outputPath?.trim() || DEFAULT_CONFIG.outputPath;
-
-  // Логика обработки расширений для комментариев:
-  // Если в конфиге строка — превращаем в массив, если массив — оставляем, если нет — берем дефолт.
-  const rawCommentExt = cfgRaw.commentExt || DEFAULT_CONFIG.commentExt;
-  const normalizedCommentExt = Array.isArray(rawCommentExt)
-    ? rawCommentExt
-    : [rawCommentExt];
-
-  return {
-    configFolder: cfgRaw.configFolder?.trim() || DEFAULT_CONFIG.configFolder,
-    outputPath: outputPath,
-    syncIndexPath: cfgRaw.syncIndexPath?.trim() || outputPath,
-    outputExt:
-      (cfgRaw.outputExt as ICodegenConfig["outputExt"]) ||
-      DEFAULT_CONFIG.outputExt,
-    pathOrder: Array.isArray(cfgRaw.pathOrder)
-      ? cfgRaw.pathOrder
-      : DEFAULT_CONFIG.pathOrder,
-    nameOrder: Array.isArray(cfgRaw.nameOrder)
-      ? cfgRaw.nameOrder
-      : DEFAULT_CONFIG.nameOrder,
-    ignoreSync: Array.isArray(cfgRaw.ignoreSync)
-      ? cfgRaw.ignoreSync
-      : DEFAULT_CONFIG.ignoreSync,
-    syncIndexExt: cfgRaw.syncIndexExt?.trim() || DEFAULT_CONFIG.syncIndexExt,
-    barrelName: cfgRaw.barrelName?.trim() || DEFAULT_CONFIG.barrelName,
-    commentExt: normalizedCommentExt as string[],
-    commentRemovalPatterns: Array.isArray(cfgRaw.commentRemovalPatterns)
-      ? cfgRaw.commentRemovalPatterns
-      : DEFAULT_CONFIG.commentRemovalPatterns,
-    syncSkipFoldersContaining: Array.isArray(cfgRaw.syncSkipFoldersContaining)
-      ? cfgRaw.syncSkipFoldersContaining
-      : DEFAULT_CONFIG.syncSkipFoldersContaining,
-  };
 }

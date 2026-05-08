@@ -1,5 +1,7 @@
 {
   "promptsFolder": "promptgen/",
+  "nameForTemplates": "templates",
   "fullTree": false,
-  "rootFolder": "src"
+  "rootFolder": "src",
+  "templatePosition": "before"
 }

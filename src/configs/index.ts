@@ -1,1 +1,3 @@
-export * from "./codegen.default.config";
+// src/configs/index.ts
+
+export * from "./";

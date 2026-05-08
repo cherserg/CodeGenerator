@@ -9,7 +9,11 @@
     "sourceMap": true,
     "rootDir": "src",
     "strict": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    /* Добавьте это */
+    "skipLibCheck": true,
+    "maxNodeModuleJsDepth": 0
   },
-  "exclude": ["node_modules", ".vscode-test"]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", ".vscode-test", "out"]
 }
