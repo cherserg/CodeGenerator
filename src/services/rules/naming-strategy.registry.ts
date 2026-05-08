@@ -1,12 +1,13 @@
 // src/services/rules/naming-strategy.registry.ts
 
 export type NamingStrategyOpts = {
-  separator?: string | string[];
+  separators: string[];
+  terminators: string[];
 };
 
 export type NamingStrategy = (
   pathSegment: string,
-  opts?: NamingStrategyOpts,
+  opts: NamingStrategyOpts,
 ) => string;
 
 export interface INamingStrategy {
@@ -16,35 +17,40 @@ export interface INamingStrategy {
 }
 
 /**
- * Создает регулярное выражение для split.
- * Использует незахватывающую группу (?:...), чтобы разделители НЕ попадали в результат split.
+ * Очищает сегмент пути: отсекает хвост по терминаторам и разбивает на слова по разделителям.
  */
-function getSplitRegex(opts?: NamingStrategyOpts): RegExp {
-  const sep = opts?.separator;
-  if (!sep) return /[.\-_]+/;
+function prepareWords(pathSegment: string, opts: NamingStrategyOpts): string[] {
+  let result = pathSegment;
 
-  if (Array.isArray(sep)) {
-    // Экранируем спецсимволы и собираем в группу (?:a|b|c)
-    const escaped = sep
+  // 1. Отсекаем всё, что идет после первого найденного терминатора
+  if (opts.terminators.length > 0) {
+    const escapedTerminators = opts.terminators
       .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .join("|");
-    return new RegExp(`(?:${escaped})+`);
+    const terminatorRegex = new RegExp(escapedTerminators);
+    const match = result.match(terminatorRegex);
+    if (match && match.index !== undefined) {
+      result = result.substring(0, match.index);
+    }
   }
 
-  // Если передана строка, считаем её готовой регуляркой
-  return new RegExp(sep);
+  // 2. Разбираем на слова по separators
+  const escapedSeparators = opts.separators
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  const splitRegex = new RegExp(`(?:${escapedSeparators})+`);
+
+  return result.split(splitRegex).filter((word) => word.length > 0);
 }
 
 export const pascalCaseNamingStrategy: INamingStrategy = {
   label: "pascalCase",
-  description:
-    "Преобразует строку в PascalCase. Разделители используются только для разбивки и удаляются.",
-  execute: (pathSegment: string, opts?: NamingStrategyOpts): string => {
-    if (!pathSegment) return "";
-    const regex = getSplitRegex(opts);
-    return pathSegment
-      .split(regex)
-      .filter((word) => word.length > 0)
+  description: "PascalCase с поддержкой отсекателей и разделителей слов.",
+  execute: (pathSegment: string, opts: NamingStrategyOpts): string => {
+    const words = prepareWords(pathSegment, opts);
+    if (words.length === 0) return "";
+
+    return words
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join("");
   },
@@ -52,15 +58,12 @@ export const pascalCaseNamingStrategy: INamingStrategy = {
 
 export const camelCaseNamingStrategy: INamingStrategy = {
   label: "camelCase",
-  description:
-    "Преобразует строку в camelCase. Разделители используются только для разбивки и удаляются.",
-  execute: (pathSegment: string, opts?: NamingStrategyOpts): string => {
-    if (!pathSegment) return "";
-    const regex = getSplitRegex(opts);
-    const parts = pathSegment.split(regex).filter((word) => word.length > 0);
-    if (parts.length === 0) return "";
+  description: "camelCase с поддержкой отсекателей и разделителей слов.",
+  execute: (pathSegment: string, opts: NamingStrategyOpts): string => {
+    const words = prepareWords(pathSegment, opts);
+    if (words.length === 0) return "";
 
-    return parts
+    return words
       .map((word, index) => {
         const transformed = word.toLowerCase();
         if (index === 0) return transformed;
@@ -81,11 +84,5 @@ export function getNamingStrategy(name?: string): NamingStrategy {
     const entry = namingStrategies[name];
     if (entry) return entry.execute;
   }
-  const fallback = namingStrategies["pascalCase"];
-  if (!fallback) {
-    throw new Error(
-      "Критическая ошибка: стратегия pascalCase не найдена в реестре.",
-    );
-  }
-  return fallback.execute;
+  return namingStrategies["pascalCase"]!.execute;
 }
