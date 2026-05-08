@@ -66,12 +66,29 @@ export class SyncIndexService {
       try {
         const { folders: sub, files } =
           await this.collectModules(normalizedDir);
-        // Прокидываем конфигурацию в правила для применения barrelMode
+
+        // Режим withAs действует только в тех папках, где есть подпапки.
+        // Если подпапок нет (sub.length === 0), принудительно используем "withoutAs".
+        const effectiveMode =
+          sub.length > 0 ? this.config.barrel.naming.mode : "withoutAs";
+
+        // Создаем эффективную копию конфигурации для генерации контента
+        const effectiveConfig: ICodegenConfig = {
+          ...this.config,
+          barrel: {
+            ...this.config.barrel,
+            naming: {
+              ...this.config.barrel.naming,
+              mode: effectiveMode,
+            },
+          },
+        };
+
         const rawBody = this.rules.generateContent(
           sub,
           files,
           this.syncExt,
-          this.config,
+          effectiveConfig,
         );
         const indexFileName = `${this.barrelName}${this.syncExt}`;
 
