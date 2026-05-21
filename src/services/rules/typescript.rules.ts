@@ -1,5 +1,3 @@
-// src/services/rules/typescript.rules.ts
-
 import { Dirent } from "fs";
 import { ICodegenConfig } from "../../interfaces/agents/codegen-config.interface";
 import { getNamingStrategy } from "./naming-strategy.registry";
@@ -39,24 +37,27 @@ class TypeScriptRules implements ISyncRule {
       return `export * from './';\n`;
     }
 
+    const isNodeMode = config.barrel.mode === "node";
     const isWithAs = config.barrel.naming.mode === "withAs";
     const strategy = getNamingStrategy(config.barrel.naming.strategy);
     const namingOpts = config.barrel.naming.opts;
 
     const folderExports = folders.map((f) => {
+      const target = isNodeMode ? `${f}/${config.barrel.name}.js` : f;
       if (isWithAs) {
         const alias = strategy(f, namingOpts);
-        return `export * as ${alias} from './${f}';`;
+        return `export * as ${alias} from './${target}';`;
       }
-      return `export * from './${f}';`;
+      return `export * from './${target}';`;
     });
 
     const fileExports = files.map((f) => {
+      const target = isNodeMode ? `${f}.js` : f;
       if (isWithAs) {
         const alias = strategy(f, namingOpts);
-        return `export * as ${alias} from './${f}';`;
+        return `export * as ${alias} from './${target}';`;
       }
-      return `export * from './${f}';`;
+      return `export * from './${target}';`;
     });
 
     return [...folderExports, ...fileExports, ""].join("\n");

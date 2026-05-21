@@ -16,6 +16,7 @@ export const CodegenConfigSchema = z
     }),
 
     barrel: z.object({
+      mode: z.enum(["classic", "node"]).default("classic"),
       name: z.string().default("index"),
       naming: z.object({
         mode: z.enum(["withoutAs", "withAs"]).default("withoutAs"),
