@@ -1,56 +1,65 @@
-// src/interfaces/agents/codegen-config.interface.ts
-
 import { z } from "zod";
 
-export const CodegenConfigSchema = z.object({
-  configFolder: z.string().min(1).default("codegen"),
+export const CodegenConfigSchema = z
+  .object({
+    configFolder: z.string().min(1).default("codegen"),
 
-  output: z.object({
-    path: z.string().min(1).default("src/generated"),
-    extention: z.string().default(".ts"),
-    pathOrder: z
-      .array(z.enum(["entity", "script"]))
-      .default(["entity", "script"]),
-    nameOrder: z
-      .array(z.enum(["entity", "script", "template"]))
-      .default(["entity", "script", "template"]),
-  }),
-
-  barrel: z.object({
-    name: z.string().default("index"),
-    naming: z.object({
-      mode: z.enum(["withoutAs", "withAs"]).default("withoutAs"),
-      strategy: z.string().default("default"),
-      opts: z
-        .object({
-          /**
-           * Символы, которые разбивают строку на слова.
-           * Файл "flow-monitor" -> ["Flow", "Monitor"]
-           */
-          separators: z.array(z.string()).optional().default(["-", "_"]),
-          /**
-           * Символы, которые отсекают чтение.
-           * Файл "chunk.processor" -> берем только "chunk"
-           */
-          terminators: z.array(z.string()).optional().default(["."]),
-        })
-        .default({
-          separators: ["-", "_"],
-          terminators: ["."],
-        }),
+    output: z.object({
+      path: z.string().min(1).default("src/generated"),
+      extention: z.string().default(".ts"),
+      pathOrder: z
+        .array(z.enum(["entity", "script"]))
+        .default(["entity", "script"]),
+      nameOrder: z
+        .array(z.enum(["entity", "script", "template"]))
+        .default(["entity", "script", "template"]),
     }),
-    ignore: z.object({
-      path: z.array(z.string()).default([]),
-      foldersName: z.array(z.string()).default([]),
-    }),
-    path: z.string().optional(),
-    extention: z.string().default(".ts"),
-  }),
 
-  comment: z.object({
-    extentions: z.array(z.string()).default([".ts", ".tsx", ".dart"]),
-    removalPatterns: z.array(z.string()).default([]),
-  }),
-});
+    barrel: z.object({
+      name: z.string().default("index"),
+      naming: z.object({
+        mode: z.enum(["withoutAs", "withAs"]).default("withoutAs"),
+        strategy: z.string().default("default"),
+        opts: z
+          .object({
+            separators: z.array(z.string()).optional().default(["-", "_"]),
+            terminators: z.array(z.string()).optional().default(["."]),
+          })
+          .default({
+            separators: ["-", "_"],
+            terminators: ["."],
+          }),
+      }),
+      ignore: z.object({
+        path: z.array(z.string()).default([]),
+        foldersName: z.array(z.string()).default([]),
+      }),
+      path: z.union([z.string(), z.array(z.string())]).optional(),
+      extention: z.string().default(".ts"),
+    }),
+
+    comment: z.object({
+      extentions: z.array(z.string()).default([".ts", ".tsx", ".dart"]),
+      removalPatterns: z.array(z.string()).default([]),
+    }),
+  })
+  .transform((data) => {
+    let resolvedPaths: string[];
+    if (!data.barrel.path) {
+      resolvedPaths = [data.output.path];
+    } else if (typeof data.barrel.path === "string") {
+      resolvedPaths = [data.barrel.path];
+    } else {
+      resolvedPaths = data.barrel.path;
+    }
+
+    return {
+      ...data,
+      barrel: {
+        ...data.barrel,
+        path: resolvedPaths,
+      },
+    };
+  });
 
 export type ICodegenConfig = z.infer<typeof CodegenConfigSchema>;

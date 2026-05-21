@@ -1,5 +1,3 @@
-// src/functions/read-config.functions.ts
-
 import * as fs from "fs/promises";
 import * as path from "path";
 import {
@@ -24,19 +22,8 @@ export async function readCodegenConfig(root: string): Promise<ICodegenConfig> {
       throw new Error(`Ошибка в структуре codegen.json:\n${errors}`);
     }
 
-    const config = result.data;
-
-    if (!config.barrel.path) {
-      config.barrel.path = config.output.path;
-    }
-
-    return config;
+    return result.data;
   } catch (error: unknown) {
-    const errMessage = error instanceof Error ? error.message : String(error);
-
-    console.error(`❌ Ошибка чтения конфигурации: ${errMessage}`);
-
-    // Возвращаем дефолты через parse({}), так как схема сама их подставит
     return CodegenConfigSchema.parse({});
   }
 }

@@ -1,5 +1,3 @@
-// src/commands/sync-barrel-files.command.ts
-
 import { Dirent } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -15,9 +13,16 @@ import {
 import { SyncIndexService } from "../services/sync-index.service";
 import { registerCommand } from "./_common";
 
-export function registerSyncBarrelFilesCommand(context: unknown) {
+interface IFolderPickItem extends vscode.QuickPickItem {
+  absPath: string;
+  baseDir: string;
+}
+
+export function registerSyncBarrelFilesCommand(
+  context: vscode.ExtensionContext,
+) {
   registerCommand(
-    context as vscode.ExtensionContext,
+    context,
     "codegenerator.syncIndex",
     async () => {
       const workspaceRoot = getWorkspaceRoot();
@@ -40,25 +45,6 @@ export function registerSyncBarrelFilesCommand(context: unknown) {
 
       const projectRoot = selectedProject.path;
       const cfg = await readCodegenConfig(projectRoot);
-
-      if (!cfg.barrel.path) {
-        showError('Параметр "path" не указан в блоке "barrel" конфига.');
-        return;
-      }
-
-      const baseDir = path.resolve(projectRoot, cfg.barrel.path);
-
-      try {
-        const stat = await fs.stat(baseDir);
-        if (!stat.isDirectory()) {
-          showError(`Путь "${baseDir}" не является директорией.`);
-          return;
-        }
-      } catch (e: unknown) {
-        const errMessage = e instanceof Error ? e.message : String(e);
-        showError(`Папка "${baseDir}" не найдена: ${errMessage}`);
-        return;
-      }
 
       async function collectAllSubfolders(
         dir: string,
@@ -83,18 +69,8 @@ export function registerSyncBarrelFilesCommand(context: unknown) {
         return res;
       }
 
-      let allFoldersRel: string[];
-      try {
-        allFoldersRel = await collectAllSubfolders(baseDir);
-        if (!allFoldersRel.length) {
-          showWarning(`В папке "${baseDir}" нет вложенных подпапок.`);
-          return;
-        }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        showError(`Не удалось собрать список подпапок: ${message}`);
-        return;
-      }
+      const quickPickItems: IFolderPickItem[] = [];
+      const servicesMap = new Map<string, SyncIndexService>();
 
       const ignoreList: string[] = Array.isArray(cfg.barrel.ignore.path)
         ? cfg.barrel.ignore.path
@@ -103,38 +79,59 @@ export function registerSyncBarrelFilesCommand(context: unknown) {
         path.resolve(projectRoot, p),
       );
 
-      const filterSvc = new SyncIndexService(
-        baseDir,
-        cfg,
-        cfg.barrel.extention,
-        absIgnorePatterns,
-        cfg.barrel.name,
-        cfg.barrel.ignore.foldersName,
-      );
+      for (const rawPath of cfg.barrel.path) {
+        const baseDir = path.resolve(projectRoot, rawPath);
+        try {
+          const stat = await fs.stat(baseDir);
+          if (!stat.isDirectory()) {
+            continue;
+          }
+        } catch {
+          continue;
+        }
 
-      const visibleFoldersRel = allFoldersRel.filter(
-        (rel) => !filterSvc.isIgnored(path.join(baseDir, rel)),
-      );
+        const filterSvc = new SyncIndexService(
+          baseDir,
+          cfg,
+          cfg.barrel.extention,
+          absIgnorePatterns,
+          cfg.barrel.name,
+          cfg.barrel.ignore.foldersName,
+        );
+        servicesMap.set(baseDir, filterSvc);
 
-      const items: vscode.QuickPickItem[] = visibleFoldersRel
-        .map((rel) => {
+        const allFoldersRel = await collectAllSubfolders(baseDir);
+        const visibleFoldersRel = allFoldersRel.filter(
+          (rel) => !filterSvc.isIgnored(path.join(baseDir, rel)),
+        );
+
+        for (const rel of visibleFoldersRel) {
           const depth = rel.split("/").length - 1;
           const indent = "  ".repeat(depth);
-          return {
+          quickPickItems.push({
             label: `${indent}└ ${path.basename(rel)}`,
             description: rel,
-          };
-        })
-        .sort((a, b) => {
-          const descA = a.description;
-          const descB = b.description;
-          if (descA && descB) {
-            return descA.localeCompare(descB);
-          }
-          return 0;
-        });
+            absPath: path.join(baseDir, rel),
+            baseDir: baseDir,
+          });
+        }
+      }
 
-      const picked = await vscode.window.showQuickPick(items, {
+      if (quickPickItems.length === 0) {
+        showWarning("Ни одной папки для синхронизации не найдено.");
+        return;
+      }
+
+      quickPickItems.sort((a, b) => {
+        const descA = a.description;
+        const descB = b.description;
+        if (descA && descB) {
+          return descA.localeCompare(descB);
+        }
+        return 0;
+      });
+
+      const picked = await vscode.window.showQuickPick(quickPickItems, {
         canPickMany: true,
         placeHolder: "Выберите подпапки для синхронизации",
       });
@@ -144,28 +141,44 @@ export function registerSyncBarrelFilesCommand(context: unknown) {
         return;
       }
 
-      const chosenRels = new Set(
-        picked
-          .map((i) => i.description)
-          .filter((desc): desc is string => Boolean(desc)),
-      );
+      const selectedAbsPaths = new Set(picked.map((item) => item.absPath));
+      const targetsPerBaseDir = new Map<string, string[]>();
 
-      const finalFoldersToSyncAbs = allFoldersRel
-        .filter((rel) => {
-          return Array.from(chosenRels).some(
-            (selected) => rel === selected || rel.startsWith(`${selected}/`),
-          );
-        })
-        .map((rel) => path.join(baseDir, rel));
+      for (const baseDir of servicesMap.keys()) {
+        const allFoldersRel = await collectAllSubfolders(baseDir);
+        const matchedAbsPaths = allFoldersRel
+          .map((rel) => path.join(baseDir, rel))
+          .filter((abs) => {
+            return Array.from(selectedAbsPaths).some(
+              (selected) =>
+                abs === selected ||
+                abs.startsWith(selected + "/") ||
+                abs.startsWith(selected + path.sep),
+            );
+          });
 
-      try {
-        const ok = await filterSvc.runOnFolders(finalFoldersToSyncAbs);
-        if (!ok) {
-          showError("Синхронизация завершилась с ошибкой.");
+        if (matchedAbsPaths.length > 0) {
+          targetsPerBaseDir.set(baseDir, matchedAbsPaths);
         }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        showError(`Ошибка синхронизации: ${message}`);
+      }
+
+      let hasError = false;
+      for (const [baseDir, absPaths] of targetsPerBaseDir.entries()) {
+        const filterSvc = servicesMap.get(baseDir);
+        if (filterSvc) {
+          try {
+            const ok = await filterSvc.runOnFolders(absPaths);
+            if (!ok) {
+              hasError = true;
+            }
+          } catch {
+            hasError = true;
+          }
+        }
+      }
+
+      if (hasError) {
+        showError("Синхронизация завершилась с ошибкой.");
       }
     },
     (err: unknown) => {
